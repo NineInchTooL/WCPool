@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>World Cup 2026 Pool</title>
+  <title>World Cup 2026 Pool · by NineInchTooL</title>
   <link rel="stylesheet" href="styles.css" />
 
   <!-- Supabase JS client (CDN) -->
@@ -49,6 +49,12 @@
       </div>
       <p id="admin-setup-error" class="error hidden">Passwords do not match</p>
     </div>
+  </div>
+
+  <!-- ── POOL TITLE HERO ────────────────────────────────────────── -->
+  <div id="pool-title-hero">
+    <h1 id="pool-title-display"></h1>
+    <span class="byline">by NineInchTooL</span>
   </div>
 
   <main>
@@ -103,7 +109,6 @@
 
     <!-- ── RESULTS VIEW (admin + viewer) ──────────────────────── -->
     <section id="results-section">
-      <div id="pool-title-display"></div>
       <div id="lock-badge" class="hidden">🔒 Allocation locked</div>
       <div id="allocation-grid"></div>
       <div id="no-allocation-msg" class="hint center">No allocation yet. Admin can generate one.</div>
@@ -119,6 +124,10 @@
       </div>
     </section>
   </main>
+
+  <footer id="site-footer">
+    <span class="byline">by NineInchTooL</span>
+  </footer>
 
   <script src="app.js"></script>
 </body>

@@ -197,14 +197,37 @@ label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; col
   font-size: 1rem;
 }
 
-/* ── Allocation grid ────────────────────────────────────────── */
-#pool-title-display {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--accent);
+/* ── Pool title hero ────────────────────────────────────────── */
+#pool-title-hero {
   text-align: center;
-  padding: 8px 0 16px;
+  padding: 28px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
+
+#pool-title-display {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+}
+
+.byline {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+/* ── Footer ─────────────────────────────────────────────────── */
+#site-footer {
+  text-align: center;
+  padding: 32px 16px 20px;
+}
+
+/* ── Allocation grid ────────────────────────────────────────── */
 
 #lock-badge {
   text-align: center;
