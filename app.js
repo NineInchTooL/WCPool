@@ -77,6 +77,7 @@ let state = {
   participants: [],
   allocation: null,
   allocationLocked: false,
+  eliminatedTeams: [],     // array of team name strings
 };
 
 let isAdmin = false;
@@ -94,6 +95,7 @@ async function saveState() {
       participants: state.participants,
       allocation: state.allocation,
       allocation_locked: state.allocationLocked ?? false,
+      eliminated_teams: state.eliminatedTeams,
       password_set: !!state.password,   // boolean flag only — no actual password
       updated_at: new Date().toISOString()
     }, { onConflict: 'id' });
@@ -114,8 +116,9 @@ async function loadState() {
       state.title            = data.title             ?? state.title;
       state.participants     = data.participants       ?? [];
       state.allocation       = data.allocation         ?? null;
-      state.allocationLocked = data.allocation_locked  ?? false;
-      state.passwordSet      = data.password_set       ?? false;
+      state.allocationLocked  = data.allocation_locked  ?? false;
+      state.eliminatedTeams   = data.eliminated_teams   ?? [];
+      state.passwordSet       = data.password_set       ?? false;
     }
   } catch (err) {
     console.warn('Supabase loadState failed, using defaults:', err.message);
@@ -291,14 +294,21 @@ function renderAllocation() {
     const teams = state.allocation[p.id] || [];
     const card = document.createElement("div");
     card.className = "alloc-card";
-    const teamItems = teams.map(t =>
-      `<li><span class="tier-dot tier-${t.tier}"></span>${escHtml(t.name)}</li>`
-    ).join("");
+    const teamItems = teams.map(t => {
+      const isElim = state.eliminatedTeams.includes(t.name);
+      return `<li class="${isElim ? "team-eliminated" : ""}"><span class="tier-dot tier-${t.tier}"></span>${isElim ? "❌ " : ""}${escHtml(t.name)}</li>`;
+    }).join("");
+    const alive = teams.filter(t => !state.eliminatedTeams.includes(t.name)).length;
+    const out = teams.length - alive;
+    const statusBadge = out > 0
+      ? `<span class="alloc-status">✅ ${alive} alive · ❌ ${out} out</span>`
+      : `<span class="alloc-status">✅ ${alive} alive</span>`;
     card.innerHTML = `
       <div class="alloc-name">
         ${escHtml(p.name)}
         <span style="font-size:0.75rem;color:var(--text-muted);font-weight:400">${teams.length} teams</span>
       </div>
+      ${statusBadge}
       <ul class="team-list">${teamItems}</ul>
     `;
     grid.appendChild(card);
@@ -319,6 +329,46 @@ function renderAdminSettings() {
 function showPwWarning() {
   if (pwWarningDismissed) return;
   document.getElementById("pw-warning-banner").classList.remove("hidden");
+}
+
+function renderEliminationTracker() {
+  const body = document.getElementById("elimination-tracker-body");
+  if (!body) return;
+  body.innerHTML = "";
+  const tierNames = {
+    1: "⭐ Tier 1 — Favoritos",
+    2: "🔵 Tier 2 — Contendientes",
+    3: "🟢 Tier 3 — Intermedios",
+    4: "⚪ Tier 4 — Sorpresas",
+  };
+  [1, 2, 3, 4].forEach(tier => {
+    const tierTeams = TEAMS.filter(t => t.tier === tier);
+    const group = document.createElement("div");
+    group.className = "elim-tier-group";
+    const label = document.createElement("div");
+    label.className = "elim-tier-label";
+    label.textContent = tierNames[tier];
+    const chips = document.createElement("div");
+    chips.className = "elim-chips";
+    tierTeams.forEach(team => {
+      const isElim = state.eliminatedTeams.includes(team.name);
+      const chip = document.createElement("button");
+      chip.className = "elim-chip" + (isElim ? " is-eliminated" : "");
+      chip.textContent = isElim ? `❌ ${team.name}` : team.name;
+      chip.addEventListener("click", async () => {
+        const idx = state.eliminatedTeams.indexOf(team.name);
+        if (idx === -1) state.eliminatedTeams.push(team.name);
+        else state.eliminatedTeams.splice(idx, 1);
+        await saveState();
+        renderEliminationTracker();
+        renderAllocation();
+      });
+      chips.appendChild(chip);
+    });
+    group.appendChild(label);
+    group.appendChild(chips);
+    body.appendChild(group);
+  });
 }
 
 function renderLockState() {
@@ -343,6 +393,7 @@ function render() {
   renderAllocation();
   renderAdminSettings();
   renderLockState();
+  renderEliminationTracker();
 }
 
 // ── Admin mode ─────────────────────────────────────────────────
@@ -554,6 +605,7 @@ function uid() {
         state.participants     = d.participants;
         state.allocation       = d.allocation;
         state.allocationLocked = d.allocation_locked;
+        state.eliminatedTeams  = d.eliminated_teams ?? [];
         state.passwordSet      = d.password_set;
         render();
       }
