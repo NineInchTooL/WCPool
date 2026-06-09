@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>World Cup 2026 Pool · by NineInchTooL</title>
+  <title>WCPool · World Cup 2026</title>
   <link rel="stylesheet" href="styles.css" />
 
   <!-- Supabase JS client (CDN) -->
@@ -15,126 +15,7 @@
   </script>
 </head>
 <body>
-  <header>
-    <h1>⚽ World Cup 2026 Pool</h1>
-    <div id="mode-bar">
-      <span id="mode-label">Viewer mode</span>
-      <button id="admin-toggle-btn">Admin</button>
-    </div>
-  </header>
-
-  <!-- Admin login modal -->
-  <div id="admin-login" class="modal hidden">
-    <div class="modal-box">
-      <h2>Admin access</h2>
-      <input type="password" id="admin-password" placeholder="Password" />
-      <div class="modal-actions">
-        <button id="admin-login-cancel">Cancel</button>
-        <button id="admin-login-submit" class="primary">Enter</button>
-      </div>
-      <p id="admin-login-error" class="error hidden">Incorrect password</p>
-    </div>
-  </div>
-
-  <!-- First-time password setup modal -->
-  <div id="admin-setup" class="modal hidden">
-    <div class="modal-box">
-      <h2>Set your password</h2>
-      <p class="hint">First time setting up admin. Choose a password — it is saved only in your browser.</p>
-      <input type="password" id="setup-password" placeholder="New password" />
-      <input type="password" id="setup-password-confirm" placeholder="Confirm password" />
-      <div class="modal-actions">
-        <button id="admin-setup-cancel">Cancel</button>
-        <button id="admin-setup-submit" class="primary">Save</button>
-      </div>
-      <p id="admin-setup-error" class="error hidden">Passwords do not match</p>
-    </div>
-  </div>
-
-  <!-- ── POOL TITLE HERO ────────────────────────────────────────── -->
-  <div id="pool-title-hero">
-    <h1 id="pool-title-display"></h1>
-    <span class="byline">by NineInchTooL</span>
-  </div>
-
-  <main>
-    <!-- ── ADMIN PANEL ─────────────────────────────────────────── -->
-    <section id="admin-panel" class="hidden">
-      <h2>Admin Panel</h2>
-
-      <!-- Participants -->
-      <div class="card">
-        <h3>Participants</h3>
-        <div id="participants-list"></div>
-        <div class="row">
-          <input type="text" id="new-participant-name" placeholder="Name" />
-          <label class="checkbox-label">
-            <input type="checkbox" id="new-participant-extra" />
-            5-team group
-          </label>
-          <button id="add-participant-btn" class="primary">Add</button>
-        </div>
-        <p class="hint">Up to 10 participants. Mark someone for the 5-team group. With 10 participants and 48 teams, 8 people get 5 teams and 2 get 4.</p>
-      </div>
-
-      <!-- Elimination Tracker -->
-      <details id="elimination-tracker" class="card">
-        <summary class="card-summary"><h3>⚽ Elimination Tracker</h3></summary>
-        <div id="elimination-tracker-body"></div>
-      </details>
-
-      <!-- Allocation controls -->
-      <div class="card">
-        <h3>Allocation</h3>
-        <button id="allocate-btn" class="primary big">🎲 Randomize &amp; Allocate</button>
-        <div class="row">
-          <button id="clear-allocation-btn" class="danger">Clear allocation</button>
-          <button id="lock-allocation-btn">🔒 Lock allocation</button>
-        </div>
-        <p id="allocation-status" class="hint"></p>
-      </div>
-
-      <!-- Pool settings -->
-      <div class="card">
-        <h3>Pool settings</h3>
-        <label>Pool title
-          <input type="text" id="pool-title-input" placeholder="e.g. Family Pool 2026" />
-        </label>
-        <label>Password (to access admin)
-          <input type="password" id="pool-password-input" placeholder="Set admin password" />
-        </label>
-        <button id="save-settings-btn" class="primary">Save settings</button>
-      </div>
-
-      <!-- Password plain-text warning -->
-      <div id="pw-warning-banner" class="hidden">
-        <span>⚠️ Your password is stored in plain text in your browser's localStorage. Do not use a password you use elsewhere.</span>
-        <button id="pw-warning-close">×</button>
-      </div>
-    </section>
-
-    <!-- ── RESULTS VIEW (admin + viewer) ──────────────────────── -->
-    <section id="results-section">
-      <div id="lock-badge" class="hidden">🔒 Allocation locked</div>
-      <div id="allocation-grid"></div>
-      <div id="no-allocation-msg" class="hint center">No allocation yet. Admin can generate one.</div>
-    </section>
-
-    <!-- ── EXPORT ──────────────────────────────────────────────── -->
-    <section id="export-section" class="hidden">
-      <div class="card">
-        <h3>Export for WhatsApp</h3>
-        <textarea id="export-text" rows="20" readonly></textarea>
-        <button id="copy-btn" class="primary">📋 Copy to clipboard</button>
-        <p id="copy-feedback" class="hint hidden">Copied!</p>
-      </div>
-    </section>
-  </main>
-
-  <footer id="site-footer">
-    <span class="byline">by NineInchTooL</span>
-  </footer>
-
+  <div id="app"><div class="loading-screen">⚽ Loading…</div></div>
   <script src="app.js"></script>
 </body>
 </html>
