@@ -57,12 +57,11 @@ const TEAMS = [
 ];
 
 const STORAGE_KEY = "wc2026_pool";
-const DEFAULT_PASSWORD = "admin1234";
 
 // ── State ──────────────────────────────────────────────────────
 let state = {
   title: "World Cup 2026 Pool",
-  password: DEFAULT_PASSWORD,
+  password: null,     // null until admin sets it — never committed to the repo
   participants: [],   // [{ id, name, extraTeam }]
   allocation: null,   // { [id]: [teamName, ...] } | null
 };
@@ -329,12 +328,46 @@ function init() {
   document.getElementById("admin-toggle-btn").addEventListener("click", () => {
     if (isAdmin) {
       exitAdmin();
+    } else if (!state.password) {
+      // No password set yet — first-time setup
+      document.getElementById("admin-setup").classList.remove("hidden");
+      document.getElementById("setup-password").value = "";
+      document.getElementById("setup-password-confirm").value = "";
+      document.getElementById("admin-setup-error").classList.add("hidden");
+      setTimeout(() => document.getElementById("setup-password").focus(), 50);
     } else {
       document.getElementById("admin-login").classList.remove("hidden");
       document.getElementById("admin-password").value = "";
       document.getElementById("admin-login-error").classList.add("hidden");
       setTimeout(() => document.getElementById("admin-password").focus(), 50);
     }
+  });
+
+  // First-time setup modal
+  document.getElementById("admin-setup-cancel").addEventListener("click", () => {
+    document.getElementById("admin-setup").classList.add("hidden");
+  });
+
+  function trySetup() {
+    const pw = document.getElementById("setup-password").value;
+    const pw2 = document.getElementById("setup-password-confirm").value;
+    if (!pw || pw !== pw2) {
+      document.getElementById("admin-setup-error").classList.remove("hidden");
+      return;
+    }
+    state.password = pw;
+    saveState();
+    document.getElementById("admin-setup").classList.add("hidden");
+    enterAdmin();
+  }
+
+  document.getElementById("admin-setup-submit").addEventListener("click", trySetup);
+  document.getElementById("setup-password-confirm").addEventListener("keydown", e => {
+    if (e.key === "Enter") trySetup();
+  });
+
+  document.getElementById("admin-setup").addEventListener("click", e => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.add("hidden");
   });
 
   // Admin login modal
@@ -357,7 +390,7 @@ function init() {
     if (e.key === "Enter") tryLogin();
   });
 
-  // Close modal on backdrop click
+  // Close login modal on backdrop click
   document.getElementById("admin-login").addEventListener("click", e => {
     if (e.target === e.currentTarget) e.currentTarget.classList.add("hidden");
   });

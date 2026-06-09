@@ -15,7 +15,7 @@
     </div>
   </header>
 
-  <!-- Admin password prompt -->
+  <!-- Admin login modal -->
   <div id="admin-login" class="modal hidden">
     <div class="modal-box">
       <h2>Admin access</h2>
@@ -24,7 +24,22 @@
         <button id="admin-login-cancel">Cancel</button>
         <button id="admin-login-submit" class="primary">Enter</button>
       </div>
-      <p id="admin-login-error" class="error hidden">Wrong password</p>
+      <p id="admin-login-error" class="error hidden">Contraseña incorrecta</p>
+    </div>
+  </div>
+
+  <!-- First-time password setup modal -->
+  <div id="admin-setup" class="modal hidden">
+    <div class="modal-box">
+      <h2>Configura tu contraseña</h2>
+      <p class="hint">Primera vez que accedes como admin. Elige una contraseña — se guarda solo en tu navegador.</p>
+      <input type="password" id="setup-password" placeholder="Nueva contraseña" />
+      <input type="password" id="setup-password-confirm" placeholder="Confirmar contraseña" />
+      <div class="modal-actions">
+        <button id="admin-setup-cancel">Cancelar</button>
+        <button id="admin-setup-submit" class="primary">Guardar</button>
+      </div>
+      <p id="admin-setup-error" class="error hidden">Las contraseñas no coinciden</p>
     </div>
   </div>
 
