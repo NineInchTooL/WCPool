@@ -489,7 +489,7 @@ function bindDashboardModals(pools) {
     updateHelper(+countEl.value);
   });
 
-  document.getElementById('create-submit').addEventListener('click', async () => {
+  document.getElementById('create-submit').onclick = async () => {
     const title = document.getElementById('new-title').value.trim();
     const count = +countEl.value;
     errEl.classList.add('hidden');
@@ -505,7 +505,7 @@ function bindDashboardModals(pools) {
       errEl.classList.remove('hidden');
       btn.disabled = false; btn.textContent = 'Create Pool';
     }
-  });
+  };
 
   // Delete modal
   const delModal = document.getElementById('delete-modal');
@@ -523,7 +523,7 @@ function bindDashboardModals(pools) {
   document.getElementById('delete-cancel').addEventListener('click', () => delModal.classList.add('hidden'));
   delModal.addEventListener('click', e => { if (e.target === delModal) delModal.classList.add('hidden'); });
 
-  document.getElementById('delete-confirm').addEventListener('click', async () => {
+  document.getElementById('delete-confirm').onclick = async () => {
     if (!pendingDeleteId) return;
     const errEl2 = document.getElementById('delete-modal-err');
     try {
@@ -534,7 +534,7 @@ function bindDashboardModals(pools) {
       errEl2.textContent = 'Failed to delete. Try again.';
       errEl2.classList.remove('hidden');
     }
-  });
+  };
 }
 
 // ── Viewer mode ────────────────────────────────────────────────────
@@ -1070,6 +1070,10 @@ async function init() {
       return;
     }
     if (event === 'SIGNED_OUT') { navigate('#/'); return; }
+    // TOKEN_REFRESHED and INITIAL_SESSION must not re-render —
+    // INITIAL_SESSION fires right after the explicit router() call below
+    // and would cause a concurrent render that doubles event listeners.
+    if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') return;
     router();
   });
 
