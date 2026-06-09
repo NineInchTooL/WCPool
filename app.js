@@ -129,56 +129,51 @@ async function loadState() {
 function allocate(participants) {
   if (participants.length === 0) return null;
   const n = participants.length;
-  const total = TEAMS.length;
-  const base = Math.floor(total / n);
-  const extras = total % n;
+  const total = TEAMS.length; // 48
+  const base = Math.floor(total / n); // 4
+  const extras = total % n; // 8 extra teams (one per extra slot)
 
-  const flagged = participants.filter(p => p.extraTeam).map(p => p.id);
-  const unflagged = participants.filter(p => !p.extraTeam).map(p => p.id);
+  // Shuffle participants to randomize who gets the extra team
+  const shuffled = [...participants];
+  shuffle(shuffled);
 
-  let bigGroup = [...flagged];
-  let smallGroup = [...unflagged];
+  // Determine who gets (base+1) teams — prefer flagged participants first
+  const flagged = shuffled.filter(p => p.extraTeam);
+  const unflagged = shuffled.filter(p => !p.extraTeam);
+  const ordered = [...flagged, ...unflagged];
+  const bigGroup = new Set(ordered.slice(0, extras).map(p => p.id));
 
-  shuffle(bigGroup);
-  shuffle(smallGroup);
-
-  while (bigGroup.length < extras && smallGroup.length > 0) bigGroup.push(smallGroup.shift());
-  while (bigGroup.length > extras) smallGroup.push(bigGroup.pop());
-
+  // Build per-tier pools (shuffled)
   const tierPools = { 1: [], 2: [], 3: [], 4: [] };
-  for (const t of TEAMS) tierPools[t.tier].push(t.name);
+  for (const t of TEAMS) tierPools[t.tier].push({ name: t.name, tier: t.tier });
   for (const pool of Object.values(tierPools)) shuffle(pool);
 
-  const allIds = participants.map(p => p.id);
-  shuffle(allIds);
-
+  // Initialize result
   const result = {};
-  for (const id of allIds) result[id] = [];
+  for (const p of participants) result[p.id] = [];
 
-  const drawOrder = [];
-  const tierKeys = [1, 2, 3, 4];
-  const tierQueue = tierKeys.map(t => [...tierPools[t]]);
-  for (let round = 0; round < 12; round++) {
-    for (const t of tierKeys) drawOrder.push({ name: tierQueue[t - 1][round], tier: t });
-  }
-
-  const assignOrder = [];
-  const bigQ = [...bigGroup];
-  const smallQ = [...smallGroup];
-  let bi = 0, si = 0;
-  while (bi < bigQ.length || si < smallQ.length) {
-    if (bi < bigQ.length) assignOrder.push(bigQ[bi++]);
-    if (si < smallQ.length) assignOrder.push(smallQ[si++]);
-  }
-
-  let drawIdx = 0;
-  const totalRounds = base + 1;
-  for (let r = 0; r < totalRounds; r++) {
-    for (const id of assignOrder) {
-      if (r === base && !bigGroup.includes(id)) continue;
-      if (drawIdx >= drawOrder.length) break;
-      result[id].push(drawOrder[drawIdx++]);
+  // BASE ROUNDS: each round assigns exactly 1 team from each tier to every player
+  for (let tier = 1; tier <= 4; tier++) {
+    const pool = [...tierPools[tier]];
+    const roundOrder = [...participants.map(p => p.id)];
+    shuffle(roundOrder);
+    for (let i = 0; i < roundOrder.length; i++) {
+      result[roundOrder[i]].push(pool[i]);
     }
+  }
+
+  // EXTRA ROUND: collect remaining teams (indices n..11 per tier), assign to bigGroup
+  const remaining = [];
+  for (let tier = 1; tier <= 4; tier++) {
+    for (let i = n; i < tierPools[tier].length; i++) {
+      remaining.push(tierPools[tier][i]);
+    }
+  }
+  shuffle(remaining);
+  const bigList = [...bigGroup];
+  shuffle(bigList);
+  for (let i = 0; i < bigList.length; i++) {
+    result[bigList[i]].push(remaining[i]);
   }
 
   return result;
