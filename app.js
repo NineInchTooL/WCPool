@@ -2,13 +2,12 @@
   SECURITY NOTE:
   - SUPABASE_ANON_KEY is a public/publishable key — safe in client-side code.
   - Admin password is stored only in localStorage, never sent to Supabase.
+  - password_set (boolean) is stored in Supabase so non-admin devices show login modal.
   - RLS policies allow public read/write intentionally for a shared family pool.
   - Do NOT use this pattern for sensitive or private data.
 */
 
 // ── World Cup 2026 teams (48), tiered by expected strength ────
-// Tier 1: favoritos (12), Tier 2: contendientes (12),
-// Tier 3: intermedios (12), Tier 4: sorpresas (12)
 const TEAMS = [
   // Tier 1 — favoritos
   { name: "🇦🇷 Argentina",                    tier: 1 },
@@ -74,8 +73,9 @@ const supabase = window.supabase.createClient(
 let state = {
   title: "World Cup 2026 Pool",
   password: null,          // null until admin sets it — never sent to Supabase
-  participants: [],        // [{ id, name, extraTeam }]
-  allocation: null,        // { [id]: [teamName, ...] } | null
+  passwordSet: false,      // mirrors Supabase password_set flag (no actual password)
+  participants: [],
+  allocation: null,
   allocationLocked: false,
 };
 
@@ -94,6 +94,7 @@ async function saveState() {
       participants: state.participants,
       allocation: state.allocation,
       allocation_locked: state.allocationLocked ?? false,
+      password_set: !!state.password,   // boolean flag only — no actual password
       updated_at: new Date().toISOString()
     }, { onConflict: 'id' });
   if (error) console.error('Supabase saveState error:', error.message);
@@ -114,6 +115,7 @@ async function loadState() {
       state.participants     = data.participants       ?? [];
       state.allocation       = data.allocation         ?? null;
       state.allocationLocked = data.allocation_locked  ?? false;
+      state.passwordSet      = data.password_set       ?? false;
     }
   } catch (err) {
     console.warn('Supabase loadState failed, using defaults:', err.message);
@@ -124,11 +126,10 @@ async function loadState() {
 function allocate(participants) {
   if (participants.length === 0) return null;
   const n = participants.length;
-  const total = TEAMS.length;             // 48
-  const base = Math.floor(total / n);     // 4
-  const extras = total % n;              // 8 → 8 people get 5, 2 get 4 (with n=10)
+  const total = TEAMS.length;
+  const base = Math.floor(total / n);
+  const extras = total % n;
 
-  // Determine who gets (base+1) teams
   const flagged = participants.filter(p => p.extraTeam).map(p => p.id);
   const unflagged = participants.filter(p => !p.extraTeam).map(p => p.id);
 
@@ -138,16 +139,9 @@ function allocate(participants) {
   shuffle(bigGroup);
   shuffle(smallGroup);
 
-  // Fill bigGroup up to `extras` slots, pulling from smallGroup if needed
-  while (bigGroup.length < extras && smallGroup.length > 0) {
-    bigGroup.push(smallGroup.shift());
-  }
-  // If bigGroup exceeds extras, demote the excess back to smallGroup
-  while (bigGroup.length > extras) {
-    smallGroup.push(bigGroup.pop());
-  }
+  while (bigGroup.length < extras && smallGroup.length > 0) bigGroup.push(smallGroup.shift());
+  while (bigGroup.length > extras) smallGroup.push(bigGroup.pop());
 
-  // Build per-tier pools (shuffled)
   const tierPools = { 1: [], 2: [], 3: [], 4: [] };
   for (const t of TEAMS) tierPools[t.tier].push(t.name);
   for (const pool of Object.values(tierPools)) shuffle(pool);
@@ -158,17 +152,13 @@ function allocate(participants) {
   const result = {};
   for (const id of allIds) result[id] = [];
 
-  // Build interleaved draw order cycling through tiers 1-2-3-4
   const drawOrder = [];
   const tierKeys = [1, 2, 3, 4];
   const tierQueue = tierKeys.map(t => [...tierPools[t]]);
   for (let round = 0; round < 12; round++) {
-    for (const t of tierKeys) {
-      drawOrder.push({ name: tierQueue[t - 1][round], tier: t });
-    }
+    for (const t of tierKeys) drawOrder.push({ name: tierQueue[t - 1][round], tier: t });
   }
 
-  // Flatten participants in assignment order: interleave big & small groups
   const assignOrder = [];
   const bigQ = [...bigGroup];
   const smallQ = [...smallGroup];
@@ -207,9 +197,7 @@ function buildExportText() {
   for (const p of state.participants) {
     const teams = state.allocation[p.id] || [];
     lines.push(`*${p.name}* (${teams.length} teams)`);
-    for (const t of teams) {
-      lines.push(`  ${tierLabel[t.tier]} ${t.name}`);
-    }
+    for (const t of teams) lines.push(`  ${tierLabel[t.tier]} ${t.name}`);
     lines.push("");
   }
   lines.push("Good luck! 🎉");
@@ -320,8 +308,7 @@ function renderAllocation() {
 }
 
 function renderPoolTitle() {
-  const el = document.getElementById("pool-title-display");
-  el.textContent = state.title || "";
+  document.getElementById("pool-title-display").textContent = state.title || "";
 }
 
 function renderAdminSettings() {
@@ -392,16 +379,21 @@ function uid() {
   render();
 
   // Admin toggle
+  // Uses state.passwordSet (from Supabase) to decide whether to show setup or login.
+  // This means ALL devices correctly show the login modal once a password has been set,
+  // even if they don't have the password in their own localStorage.
   document.getElementById("admin-toggle-btn").addEventListener("click", () => {
     if (isAdmin) {
       exitAdmin();
-    } else if (!state.password) {
+    } else if (!state.passwordSet) {
+      // No password set anywhere yet — show first-time setup
       document.getElementById("admin-setup").classList.remove("hidden");
       document.getElementById("setup-password").value = "";
       document.getElementById("setup-password-confirm").value = "";
       document.getElementById("admin-setup-error").classList.add("hidden");
       setTimeout(() => document.getElementById("setup-password").focus(), 50);
     } else {
+      // Password already set — show login modal
       document.getElementById("admin-login").classList.remove("hidden");
       document.getElementById("admin-password").value = "";
       document.getElementById("admin-login-error").classList.add("hidden");
@@ -422,6 +414,7 @@ function uid() {
       return;
     }
     state.password = pw;
+    state.passwordSet = true;
     await saveState();
     document.getElementById("admin-setup").classList.add("hidden");
     enterAdmin();
@@ -523,7 +516,7 @@ function uid() {
     const title = document.getElementById("pool-title-input").value.trim();
     const pw = document.getElementById("pool-password-input").value;
     if (title) state.title = title;
-    if (pw) { state.password = pw; showPwWarning(); }
+    if (pw) { state.password = pw; state.passwordSet = true; showPwWarning(); }
     await saveState();
     renderPoolTitle();
     document.getElementById("pool-password-input").value = "";
@@ -561,6 +554,7 @@ function uid() {
         state.participants     = d.participants;
         state.allocation       = d.allocation;
         state.allocationLocked = d.allocation_locked;
+        state.passwordSet      = d.password_set;
         render();
       }
     )
