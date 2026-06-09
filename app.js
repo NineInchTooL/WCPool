@@ -995,14 +995,33 @@ async function router() {
   else                  currentSession ? await renderDashboard() : renderLanding();
 }
 
+// ── Profile upsert (replaces removed DB trigger) ───────────────────
+async function ensureProfile(session) {
+  const { data: existing } = await db
+    .from('profiles')
+    .select('id')
+    .eq('id', session.user.id)
+    .single();
+
+  if (!existing) {
+    await db.from('profiles').insert({
+      id: session.user.id,
+      display_name: session.user.user_metadata?.full_name ?? session.user.email,
+      avatar_url: session.user.user_metadata?.avatar_url ?? null,
+    });
+  }
+}
+
 // ── Init ───────────────────────────────────────────────────────────
 async function init() {
   const { data: { session } } = await db.auth.getSession();
   currentSession = session;
+  if (session) await ensureProfile(session);
 
-  db.auth.onAuthStateChange((event, newSession) => {
+  db.auth.onAuthStateChange(async (event, newSession) => {
     currentSession = newSession;
     if (event === 'SIGNED_IN') {
+      await ensureProfile(newSession);
       const redirect = sessionStorage.getItem('wcpool_redirect');
       sessionStorage.removeItem('wcpool_redirect');
       navigate(redirect && redirect !== '#/' && !redirect.includes('access_token') ? redirect : '#/');
