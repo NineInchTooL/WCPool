@@ -285,12 +285,15 @@ function allocationCardsHTML(pool) {
         ${isElim ? '❌ ' : ''}${escHtml(t.flag)} ${escHtml(t.name)}
       </li>`;
     }).join('');
+    const statusText = out === 0
+      ? `✅ ${alive} vivos`
+      : `✅ ${alive} vivos · ❌ ${out} eliminados`;
     return `<div class="alloc-card">
       <div class="alloc-card-name">
         <span class="alloc-card-name-text">${escHtml(p.name)}</span>
-        <span class="alloc-card-count">${teams.length} equipos</span>
+        <span class="alloc-card-count">${teams.length > 0 ? `${teams.length} equipos` : '—'}</span>
       </div>
-      <span class="alloc-status">✅ ${alive} vivos · ❌ ${out} eliminados</span>
+      <span class="alloc-status">${statusText}</span>
       <ul class="team-list">${teamsHtml}</ul>
     </div>`;
   }).join('');
@@ -479,6 +482,7 @@ function bindDashboardModals(pools) {
 
   document.getElementById('create-pool-btn').addEventListener('click', () => {
     modal.classList.remove('hidden');
+    updateHelper(+countEl.value);
     document.getElementById('new-title').focus();
   });
   document.getElementById('create-cancel').addEventListener('click', () => modal.classList.add('hidden'));
@@ -544,7 +548,7 @@ async function renderViewer(poolId) {
   document.getElementById('app').innerHTML = `
     <header class="site-header">
       <div class="header-left">
-        <a href="#/" class="header-back">← My Pools</a>
+        <a href="#/" class="header-back">← <span class="header-back-text">My Pools</span></a>
       </div>
       <div class="header-center">
         <span class="byline">by NineInchTooL</span>
@@ -580,7 +584,12 @@ async function renderViewer(poolId) {
   }
 
   renderViewerContent(pool);
-  subscribeToPool(poolId, updated => renderViewerContent(updated));
+  subscribeToPool(poolId, updated => {
+    if (typeof updated.allocation      === 'string') updated.allocation      = JSON.parse(updated.allocation);
+    if (typeof updated.eliminated_teams === 'string') updated.eliminated_teams = JSON.parse(updated.eliminated_teams);
+    if (typeof updated.participants     === 'string') updated.participants     = JSON.parse(updated.participants);
+    renderViewerContent(updated);
+  });
 }
 
 function renderViewerContent(pool) {
@@ -613,7 +622,7 @@ async function renderAdmin(poolId) {
   document.getElementById('app').innerHTML = `
     <header class="site-header">
       <div class="header-left">
-        <a href="#/" class="header-back">← My Pools</a>
+        <a href="#/" class="header-back">← <span class="header-back-text">My Pools</span></a>
       </div>
       <div class="header-right">
         <a href="#/pool/${poolId}" class="btn btn-sm btn-ghost">👁 Viewer</a>
@@ -1005,12 +1014,16 @@ function renderEliminationTracker(pool) {
       const chip = document.createElement('button');
       chip.className = `elim-chip${out ? ' is-elim' : ''}`;
       chip.textContent = (out ? '❌ ' : '') + `${team.flag} ${team.name}`;
+      let saving = false;
       chip.addEventListener('click', async () => {
+        if (saving) return;
+        saving = true;
+        chip.style.opacity = '0.5';
         const elim = pool.eliminated_teams || [];
         const idx  = elim.indexOf(id);
         pool.eliminated_teams = idx === -1 ? [...elim, id] : elim.filter(n => n !== id);
         try { await savePool(pool); renderEliminationTracker(pool); refreshAllocUI(pool); }
-        catch { showAdminError('Failed to update.'); }
+        catch { showAdminError('Failed to update.'); saving = false; }
       });
       chips.appendChild(chip);
     });

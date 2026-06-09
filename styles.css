@@ -678,3 +678,8 @@ details.elim-card[open] > summary {
   .landing-card { padding: 30px 20px; }
   .modal-box { padding: 20px; }
 }
+
+@media (max-width: 480px) {
+  .header-back-text { display: none; }
+  .header-center { display: none; }
+}
