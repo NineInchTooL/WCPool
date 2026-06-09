@@ -64,7 +64,7 @@ const TEAMS = [
 ];
 
 // ── Supabase client ────────────────────────────────────────────
-const supabase = window.supabase.createClient(
+const db = window.supabase.createClient(
   window.SUPABASE_URL,
   window.SUPABASE_ANON_KEY
 );
@@ -86,7 +86,7 @@ let pwWarningDismissed = false;
 async function saveState() {
   // password stays in localStorage only — never goes to Supabase
   localStorage.setItem('wc2026_pool_password', state.password || '');
-  const { error } = await supabase
+  const { error } = await db
     .from('pool_state')
     .upsert({
       id: 'singleton',
@@ -104,7 +104,7 @@ async function loadState() {
   // always load password from localStorage
   state.password = localStorage.getItem('wc2026_pool_password') || null;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('pool_state')
       .select('*')
       .eq('id', 'singleton')
@@ -543,7 +543,7 @@ function uid() {
   });
 
   // Real-time subscription
-  supabase
+  db
     .channel('pool_state_changes')
     .on(
       'postgres_changes',
