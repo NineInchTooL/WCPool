@@ -97,4 +97,4 @@ See the `allocate()` function in `app.js`. Three phases:
 
 ## Author
 
-Built by [NineInchTooL](https://github.com/NineInchTooL) for World Cup 2026 🏆
+Built by [NineInchTooL](https://github.com/NineInchTooL) for family and friends during the World Cup 2026 🏆
