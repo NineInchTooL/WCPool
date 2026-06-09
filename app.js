@@ -61,12 +61,14 @@ const STORAGE_KEY = "wc2026_pool";
 // ── State ──────────────────────────────────────────────────────
 let state = {
   title: "World Cup 2026 Pool",
-  password: null,     // null until admin sets it — never committed to the repo
-  participants: [],   // [{ id, name, extraTeam }]
-  allocation: null,   // { [id]: [teamName, ...] } | null
+  password: null,          // null until admin sets it — never committed to the repo
+  participants: [],        // [{ id, name, extraTeam }]
+  allocation: null,        // { [id]: [teamName, ...] } | null
+  allocationLocked: false,
 };
 
 let isAdmin = false;
+let pwWarningDismissed = false;
 
 // ── Persistence ────────────────────────────────────────────────
 function saveState() {
@@ -219,13 +221,54 @@ function renderParticipantsList() {
   for (const p of state.participants) {
     const row = document.createElement("div");
     row.className = "participant-row";
+    row.dataset.id = p.id;
     row.innerHTML = `
       <span class="p-name">${escHtml(p.name)}</span>
       <span class="p-badge${p.extraTeam ? "" : " hidden-badge"}">+5 teams</span>
+      <button class="edit-btn" data-id="${p.id}" title="Edit">✏️</button>
       <button class="remove-btn" data-id="${p.id}" title="Remove">✕</button>
     `;
     container.appendChild(row);
   }
+
+  container.querySelectorAll(".edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.id;
+      const p = state.participants.find(x => x.id === id);
+      if (!p) return;
+      const row = container.querySelector(`.participant-row[data-id="${id}"]`);
+      row.innerHTML = `
+        <input class="edit-name-input" type="text" value="${escHtml(p.name)}" />
+        <label class="checkbox-label" style="white-space:nowrap">
+          <input class="edit-extra-check" type="checkbox" ${p.extraTeam ? "checked" : ""} />
+          5-team group
+        </label>
+        <button class="edit-save-btn primary" data-id="${id}">Save</button>
+        <button class="edit-cancel-btn" data-id="${id}">Cancel</button>
+      `;
+      row.querySelector(".edit-name-input").focus();
+
+      row.querySelector(".edit-save-btn").addEventListener("click", () => {
+        const newName = row.querySelector(".edit-name-input").value.trim();
+        if (!newName) return;
+        p.name = newName;
+        p.extraTeam = row.querySelector(".edit-extra-check").checked;
+        saveState();
+        renderParticipantsList();
+        renderAllocation();
+      });
+
+      row.querySelector(".edit-cancel-btn").addEventListener("click", () => {
+        renderParticipantsList();
+      });
+
+      row.querySelector(".edit-name-input").addEventListener("keydown", e => {
+        if (e.key === "Enter") row.querySelector(".edit-save-btn").click();
+        if (e.key === "Escape") row.querySelector(".edit-cancel-btn").click();
+      });
+    });
+  });
+
   container.querySelectorAll(".remove-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.id;
@@ -284,11 +327,33 @@ function renderAdminSettings() {
   document.getElementById("pool-password-input").value = "";
 }
 
+function showPwWarning() {
+  if (pwWarningDismissed) return;
+  document.getElementById("pw-warning-banner").classList.remove("hidden");
+}
+
+function renderLockState() {
+  const locked = state.allocationLocked;
+  const allocBtn = document.getElementById("allocate-btn");
+  const clearBtn = document.getElementById("clear-allocation-btn");
+  const lockBtn = document.getElementById("lock-allocation-btn");
+  const badge = document.getElementById("lock-badge");
+
+  allocBtn.disabled = locked;
+  clearBtn.disabled = locked;
+  allocBtn.style.opacity = locked ? "0.45" : "";
+  clearBtn.style.opacity = locked ? "0.45" : "";
+
+  lockBtn.textContent = locked ? "🔓 Unlock allocation" : "🔒 Lock allocation";
+  badge.classList.toggle("hidden", !locked);
+}
+
 function renderAll() {
   renderPoolTitle();
   renderParticipantsList();
   renderAllocation();
   renderAdminSettings();
+  renderLockState();
 }
 
 // ── Admin mode ─────────────────────────────────────────────────
@@ -359,6 +424,7 @@ function init() {
     saveState();
     document.getElementById("admin-setup").classList.add("hidden");
     enterAdmin();
+    showPwWarning();
   }
 
   document.getElementById("admin-setup-submit").addEventListener("click", trySetup);
@@ -418,6 +484,7 @@ function init() {
 
   // Allocate
   document.getElementById("allocate-btn").addEventListener("click", () => {
+    if (state.allocationLocked) return;
     if (state.participants.length === 0) {
       document.getElementById("allocation-status").textContent = "Add participants first.";
       return;
@@ -431,6 +498,7 @@ function init() {
 
   // Clear allocation
   document.getElementById("clear-allocation-btn").addEventListener("click", () => {
+    if (state.allocationLocked) return;
     if (!confirm("Clear the current allocation?")) return;
     state.allocation = null;
     saveState();
@@ -438,16 +506,34 @@ function init() {
     document.getElementById("allocation-status").textContent = "Allocation cleared.";
   });
 
+  // Lock / unlock allocation
+  document.getElementById("lock-allocation-btn").addEventListener("click", () => {
+    if (state.allocationLocked) {
+      if (!confirm("Are you sure you want to unlock the allocation? This will allow re-randomizing.")) return;
+      state.allocationLocked = false;
+    } else {
+      state.allocationLocked = true;
+    }
+    saveState();
+    renderLockState();
+  });
+
   // Save settings
   document.getElementById("save-settings-btn").addEventListener("click", () => {
     const title = document.getElementById("pool-title-input").value.trim();
     const pw = document.getElementById("pool-password-input").value;
     if (title) state.title = title;
-    if (pw) state.password = pw;
+    if (pw) { state.password = pw; showPwWarning(); }
     saveState();
     renderPoolTitle();
     document.getElementById("pool-password-input").value = "";
     alert("Settings saved.");
+  });
+
+  // Password warning banner dismiss
+  document.getElementById("pw-warning-close").addEventListener("click", () => {
+    pwWarningDismissed = true;
+    document.getElementById("pw-warning-banner").classList.add("hidden");
   });
 
   // Copy export

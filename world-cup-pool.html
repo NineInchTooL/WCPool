@@ -24,22 +24,22 @@
         <button id="admin-login-cancel">Cancel</button>
         <button id="admin-login-submit" class="primary">Enter</button>
       </div>
-      <p id="admin-login-error" class="error hidden">Contraseña incorrecta</p>
+      <p id="admin-login-error" class="error hidden">Incorrect password</p>
     </div>
   </div>
 
   <!-- First-time password setup modal -->
   <div id="admin-setup" class="modal hidden">
     <div class="modal-box">
-      <h2>Configura tu contraseña</h2>
-      <p class="hint">Primera vez que accedes como admin. Elige una contraseña — se guarda solo en tu navegador.</p>
-      <input type="password" id="setup-password" placeholder="Nueva contraseña" />
-      <input type="password" id="setup-password-confirm" placeholder="Confirmar contraseña" />
+      <h2>Set your password</h2>
+      <p class="hint">First time setting up admin. Choose a password — it is saved only in your browser.</p>
+      <input type="password" id="setup-password" placeholder="New password" />
+      <input type="password" id="setup-password-confirm" placeholder="Confirm password" />
       <div class="modal-actions">
-        <button id="admin-setup-cancel">Cancelar</button>
-        <button id="admin-setup-submit" class="primary">Guardar</button>
+        <button id="admin-setup-cancel">Cancel</button>
+        <button id="admin-setup-submit" class="primary">Save</button>
       </div>
-      <p id="admin-setup-error" class="error hidden">Las contraseñas no coinciden</p>
+      <p id="admin-setup-error" class="error hidden">Passwords do not match</p>
     </div>
   </div>
 
@@ -60,14 +60,17 @@
           </label>
           <button id="add-participant-btn" class="primary">Add</button>
         </div>
-        <p class="hint">Up to 10 participants. Mark someone for the 5-team group (5 people get 5 teams, 5 get 4).</p>
+        <p class="hint">Up to 10 participants. Mark someone for the 5-team group. With 10 participants and 48 teams, 8 people get 5 teams and 2 get 4.</p>
       </div>
 
       <!-- Allocation controls -->
       <div class="card">
         <h3>Allocation</h3>
         <button id="allocate-btn" class="primary big">🎲 Randomize &amp; Allocate</button>
-        <button id="clear-allocation-btn" class="danger">Clear allocation</button>
+        <div class="row">
+          <button id="clear-allocation-btn" class="danger">Clear allocation</button>
+          <button id="lock-allocation-btn">🔒 Lock allocation</button>
+        </div>
         <p id="allocation-status" class="hint"></p>
       </div>
 
@@ -82,11 +85,18 @@
         </label>
         <button id="save-settings-btn" class="primary">Save settings</button>
       </div>
+
+      <!-- Password plain-text warning -->
+      <div id="pw-warning-banner" class="hidden">
+        <span>⚠️ Your password is stored in plain text in your browser's localStorage. Do not use a password you use elsewhere.</span>
+        <button id="pw-warning-close">×</button>
+      </div>
     </section>
 
     <!-- ── RESULTS VIEW (admin + viewer) ──────────────────────── -->
     <section id="results-section">
       <div id="pool-title-display"></div>
+      <div id="lock-badge" class="hidden">🔒 Allocation locked</div>
       <div id="allocation-grid"></div>
       <div id="no-allocation-msg" class="hint center">No allocation yet. Admin can generate one.</div>
     </section>

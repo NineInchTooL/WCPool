@@ -131,6 +131,28 @@ label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; col
 }
 .row input[type="text"] { flex: 1; min-width: 140px; }
 
+/* ── Password warning banner ────────────────────────────────── */
+#pw-warning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #3a2000;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+#pw-warning-banner span { flex: 1; }
+#pw-warning-banner button {
+  background: transparent;
+  color: var(--accent);
+  font-size: 1.1rem;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 /* ── Hints & errors ─────────────────────────────────────────── */
 .hint { color: var(--text-muted); font-size: 0.82rem; }
 .error { color: var(--danger); font-size: 0.85rem; }
@@ -161,6 +183,13 @@ label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; col
   padding: 2px 6px;
 }
 .participant-row .p-badge.hidden-badge { visibility: hidden; }
+.participant-row button.edit-btn {
+  background: transparent;
+  color: var(--accent2);
+  padding: 2px 8px;
+  font-size: 0.85rem;
+}
+.participant-row .edit-name-input { flex: 1; min-width: 100px; }
 .participant-row button.remove-btn {
   background: transparent;
   color: var(--danger);
@@ -175,6 +204,15 @@ label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; col
   color: var(--accent);
   text-align: center;
   padding: 8px 0 16px;
+}
+
+#lock-badge {
+  text-align: center;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.9rem;
+  padding: 6px 0 12px;
+  letter-spacing: 0.5px;
 }
 
 #allocation-grid {
