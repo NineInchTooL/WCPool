@@ -1,80 +1,83 @@
 /*
   SECURITY NOTE:
   - SUPABASE_ANON_KEY is a public/publishable key — safe in client-side code.
-  - Authentication is handled by Supabase Auth (Google OAuth).
-  - Admin access is enforced by checking pool.owner_id === auth.uid().
+  - Authentication is via Supabase Auth (Google OAuth). No passwords stored.
+  - Pool ownership enforced by checking pool.owner_id === auth.uid().
   - RLS allows public read (viewer mode) and owner-only write.
   - Do NOT use this pattern for sensitive or private data.
 */
 
-// ── Teams ─────────────────────────────────────────────────────────
+// ── Teams & constants ──────────────────────────────────────────────
+const TIERS = [1, 2, 3, 4];
+
 const TEAMS = [
-  { name: "🇦🇷 Argentina",                  tier: 1 },
-  { name: "🇫🇷 Francia",                     tier: 1 },
-  { name: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Inglaterra",                 tier: 1 },
-  { name: "🇧🇷 Brasil",                      tier: 1 },
-  { name: "🇪🇸 España",                      tier: 1 },
-  { name: "🇩🇪 Alemania",                    tier: 1 },
-  { name: "🇵🇹 Portugal",                    tier: 1 },
-  { name: "🇳🇱 Países Bajos",                tier: 1 },
-  { name: "🇧🇪 Bélgica",                     tier: 1 },
-  { name: "🇺🇾 Uruguay",                     tier: 1 },
-  { name: "🇨🇴 Colombia",                    tier: 1 },
-  { name: "🇺🇸 Estados Unidos",              tier: 1 },
-  { name: "🇲🇽 México",                      tier: 2 },
-  { name: "🇭🇷 Croacia",                     tier: 2 },
-  { name: "🇨🇭 Suiza",                       tier: 2 },
-  { name: "🇸🇳 Senegal",                     tier: 2 },
-  { name: "🇯🇵 Japón",                       tier: 2 },
-  { name: "🇲🇦 Marruecos",                   tier: 2 },
-  { name: "🇰🇷 Corea del Sur",               tier: 2 },
-  { name: "🇪🇨 Ecuador",                     tier: 2 },
-  { name: "🇦🇹 Austria",                     tier: 2 },
-  { name: "🇹🇷 Turquía",                     tier: 2 },
-  { name: "🇨🇦 Canadá",                      tier: 2 },
-  { name: "🇸🇪 Suecia",                      tier: 2 },
-  { name: "🇦🇺 Australia",                   tier: 3 },
-  { name: "🇳🇴 Noruega",                     tier: 3 },
-  { name: "🇵🇾 Paraguay",                    tier: 3 },
-  { name: "🇹🇳 Túnez",                       tier: 3 },
-  { name: "🇧🇦 Bosnia y Herzegovina",        tier: 3 },
-  { name: "🇬🇭 Ghana",                       tier: 3 },
-  { name: "🇨🇿 República Checa",             tier: 3 },
-  { name: "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Escocia",                   tier: 3 },
-  { name: "🇨🇮 Costa de Marfil",             tier: 3 },
-  { name: "🇩🇿 Argelia",                     tier: 3 },
-  { name: "🇮🇷 Irán",                        tier: 3 },
-  { name: "🇪🇬 Egipto",                      tier: 3 },
-  { name: "🇸🇦 Arabia Saudita",              tier: 4 },
-  { name: "🇿🇦 Sudáfrica",                   tier: 4 },
-  { name: "🇮🇶 Irak",                        tier: 4 },
-  { name: "🇯🇴 Jordania",                    tier: 4 },
-  { name: "🇶🇦 Catar",                       tier: 4 },
-  { name: "🇺🇿 Uzbekistán",                  tier: 4 },
-  { name: "🇨🇼 Curazao",                     tier: 4 },
-  { name: "🇭🇹 Haití",                       tier: 4 },
-  { name: "🇵🇦 Panamá",                      tier: 4 },
-  { name: "🇳🇿 Nueva Zelanda",               tier: 4 },
-  { name: "🇨🇩 Rep. Democrática del Congo",  tier: 4 },
-  { name: "🇨🇻 Cabo Verde",                  tier: 4 },
+  // Tier 1
+  { flag: '🇦🇷', name: 'Argentina',                   tier: 1 },
+  { flag: '🇫🇷', name: 'Francia',                      tier: 1 },
+  { flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', name: 'Inglaterra',                  tier: 1 },
+  { flag: '🇧🇷', name: 'Brasil',                       tier: 1 },
+  { flag: '🇪🇸', name: 'España',                       tier: 1 },
+  { flag: '🇩🇪', name: 'Alemania',                     tier: 1 },
+  { flag: '🇵🇹', name: 'Portugal',                     tier: 1 },
+  { flag: '🇳🇱', name: 'Países Bajos',                 tier: 1 },
+  { flag: '🇧🇪', name: 'Bélgica',                      tier: 1 },
+  { flag: '🇺🇾', name: 'Uruguay',                      tier: 1 },
+  { flag: '🇨🇴', name: 'Colombia',                     tier: 1 },
+  { flag: '🇺🇸', name: 'Estados Unidos',               tier: 1 },
+  // Tier 2
+  { flag: '🇲🇽', name: 'México',                       tier: 2 },
+  { flag: '🇭🇷', name: 'Croacia',                      tier: 2 },
+  { flag: '🇨🇭', name: 'Suiza',                        tier: 2 },
+  { flag: '🇸🇳', name: 'Senegal',                      tier: 2 },
+  { flag: '🇯🇵', name: 'Japón',                        tier: 2 },
+  { flag: '🇲🇦', name: 'Marruecos',                    tier: 2 },
+  { flag: '🇰🇷', name: 'Corea del Sur',                tier: 2 },
+  { flag: '🇪🇨', name: 'Ecuador',                      tier: 2 },
+  { flag: '🇦🇹', name: 'Austria',                      tier: 2 },
+  { flag: '🇹🇷', name: 'Turquía',                      tier: 2 },
+  { flag: '🇨🇦', name: 'Canadá',                       tier: 2 },
+  { flag: '🇸🇪', name: 'Suecia',                       tier: 2 },
+  // Tier 3
+  { flag: '🇦🇺', name: 'Australia',                    tier: 3 },
+  { flag: '🇳🇴', name: 'Noruega',                      tier: 3 },
+  { flag: '🇵🇾', name: 'Paraguay',                     tier: 3 },
+  { flag: '🇹🇳', name: 'Túnez',                        tier: 3 },
+  { flag: '🇧🇦', name: 'Bosnia y Herzegovina',         tier: 3 },
+  { flag: '🇬🇭', name: 'Ghana',                        tier: 3 },
+  { flag: '🇨🇿', name: 'República Checa',              tier: 3 },
+  { flag: '🏴󠁧󠁢󠁳󠁣󠁴󠁿', name: 'Escocia',                    tier: 3 },
+  { flag: '🇨🇮', name: 'Costa de Marfil',              tier: 3 },
+  { flag: '🇩🇿', name: 'Argelia',                      tier: 3 },
+  { flag: '🇮🇷', name: 'Irán',                         tier: 3 },
+  { flag: '🇪🇬', name: 'Egipto',                       tier: 3 },
+  // Tier 4
+  { flag: '🇸🇦', name: 'Arabia Saudita',               tier: 4 },
+  { flag: '🇿🇦', name: 'Sudáfrica',                    tier: 4 },
+  { flag: '🇮🇶', name: 'Irak',                         tier: 4 },
+  { flag: '🇯🇴', name: 'Jordania',                     tier: 4 },
+  { flag: '🇶🇦', name: 'Catar',                        tier: 4 },
+  { flag: '🇺🇿', name: 'Uzbekistán',                   tier: 4 },
+  { flag: '🇨🇼', name: 'Curazao',                      tier: 4 },
+  { flag: '🇭🇹', name: 'Haití',                        tier: 4 },
+  { flag: '🇵🇦', name: 'Panamá',                       tier: 4 },
+  { flag: '🇳🇿', name: 'Nueva Zelanda',                tier: 4 },
+  { flag: '🇨🇩', name: 'Rep. Democrática del Congo',   tier: 4 },
+  { flag: '🇨🇻', name: 'Cabo Verde',                   tier: 4 },
 ];
 
 const TEAM_SETS = {
   WC2026: { label: 'FIFA World Cup 2026', teams: TEAMS },
 };
 
-// ── Supabase ──────────────────────────────────────────────────────
-const db = window.supabase.createClient(
-  window.SUPABASE_URL,
-  window.SUPABASE_ANON_KEY
-);
+// ── Supabase (use `db` — window.supabase is non-configurable) ──────
+const db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
-// ── App state ─────────────────────────────────────────────────────
-let session = null;
+// ── State ──────────────────────────────────────────────────────────
+let currentSession = null;
 let realtimeChannel = null;
 
-// ── Theme ─────────────────────────────────────────────────────────
-(function () {
+// ── Theme ──────────────────────────────────────────────────────────
+(function initTheme() {
   const saved = localStorage.getItem('wcpool_theme') || 'dark';
   document.documentElement.dataset.theme = saved;
 })();
@@ -83,12 +86,16 @@ function toggleTheme() {
   const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   document.documentElement.dataset.theme = next;
   localStorage.setItem('wcpool_theme', next);
-  document.querySelectorAll('.theme-toggle').forEach(btn => {
-    btn.textContent = next === 'dark' ? '☀️' : '🌙';
+  document.querySelectorAll('.theme-toggle').forEach(b => {
+    b.textContent = next === 'dark' ? '☀️' : '🌙';
   });
 }
 
-// ── Utilities ─────────────────────────────────────────────────────
+function themeIcon() {
+  return document.documentElement.dataset.theme === 'dark' ? '☀️' : '🌙';
+}
+
+// ── Utilities ──────────────────────────────────────────────────────
 function escHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -96,28 +103,25 @@ function escHtml(s) {
 }
 
 function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    [a[i], a[j]] = [a[j], a[i]];
   }
-  return arr;
+  return a;
 }
 
 function nanoid(len = 6) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
   return Array.from(crypto.getRandomValues(new Uint8Array(len)))
     .map(b => chars[b % chars.length]).join('');
 }
 
-function uid() {
-  return Math.random().toString(36).slice(2, 9);
-}
+function uid() { return Math.random().toString(36).slice(2, 9); }
 
-function navigate(hash) {
-  window.location.hash = hash;
-}
+function navigate(hash) { window.location.hash = hash; }
 
-async function copyText(text, btn) {
+async function copyToClipboard(text, btn) {
   try {
     await navigator.clipboard.writeText(text);
     const orig = btn.textContent;
@@ -126,68 +130,49 @@ async function copyText(text, btn) {
   } catch { /* silent */ }
 }
 
-function buildExportText(pool) {
-  if (!pool.allocation) return '';
-  const lines = [`🏆 *${pool.title}*`, ''];
-  const tierLabel = { 1: '⭐', 2: '🔵', 3: '🟢', 4: '⚪' };
-  const eliminated = pool.eliminated_teams || [];
-  for (const p of (pool.participants || [])) {
-    const teams = (pool.allocation[p.id] || []);
-    lines.push(`*${p.name}* (${teams.length} teams)`);
-    for (const t of teams) {
-      const isOut = eliminated.includes(t.name);
-      lines.push(`  ${isOut ? '❌' : tierLabel[t.tier]} ${t.name}${isOut ? ' (eliminado)' : ''}`);
-    }
-    lines.push('');
-  }
-  lines.push('Good luck! 🎉');
-  return lines.join('\n');
-}
+function teamId(team) { return `${team.flag} ${team.name}`; }
 
 // ── Allocation algorithm ───────────────────────────────────────────
 function allocate(participants) {
-  if (!participants || participants.length === 0) return null;
+  if (!participants.length) return null;
   const N = participants.length;
-
-  // Build per-tier pools (shuffled)
-  const tierPools = {};
-  for (let t = 1; t <= 4; t++) {
-    tierPools[t] = TEAMS.filter(tm => tm.tier === t)
-      .map(tm => ({ name: tm.name, tier: t }));
-    shuffle(tierPools[t]);
-  }
-
   const result = {};
   for (const p of participants) result[p.id] = [];
 
-  // For each tier: distribute 12 teams across N players
-  // floor(12/N) guaranteed per player, extras go to flagged players first
-  for (let tier = 1; tier <= 4; tier++) {
-    const pool = tierPools[tier]; // 12 teams
-    const perPlayer = Math.floor(pool.length / N);
-    const numExtras = pool.length % N;
-    let idx = 0;
-
-    const order = participants.map(p => p.id);
-    shuffle(order);
-    for (let round = 0; round < perPlayer; round++) {
-      for (const id of order) result[id].push(pool[idx++]);
-    }
-
-    if (numExtras > 0) {
-      const flagged = participants.filter(p => p.extraTeam).map(p => p.id);
-      const unflagged = participants.filter(p => !p.extraTeam).map(p => p.id);
-      shuffle(flagged); shuffle(unflagged);
-      [...flagged, ...unflagged].slice(0, numExtras).forEach(id => {
-        result[id].push(pool[idx++]);
-      });
-    }
+  for (const tier of TIERS) {
+    const pool = shuffle(TEAMS.filter(t => t.tier === tier));
+    const playerOrder = shuffle([...participants.map(p => p.id)]);
+    pool.forEach((team, i) => {
+      result[playerOrder[i % N]].push(team);
+    });
   }
-
   return result;
 }
 
-// ── Database ──────────────────────────────────────────────────────
+// ── WhatsApp export ────────────────────────────────────────────────
+const TIER_ICON = { 1: '⭐', 2: '🔵', 3: '🟢', 4: '⚪' };
+
+function buildExportText(pool) {
+  if (!pool.allocation || !(pool.participants || []).length) return '';
+  const sep = '━'.repeat(15);
+  const lines = [`🏆 *${pool.title}*`, sep];
+  for (const p of pool.participants) {
+    const teams = pool.allocation[p.id] || [];
+    const byTier = { 1: [], 2: [], 3: [], 4: [] };
+    for (const t of teams) byTier[t.tier].push(`${t.flag} ${t.name}`);
+    lines.push(`👤 *${p.name}*`);
+    const mainLine = TIERS
+      .map(tier => byTier[tier][0] ? `${TIER_ICON[tier]} ${byTier[tier][0]}` : null)
+      .filter(Boolean).join(' · ');
+    if (mainLine) lines.push(mainLine);
+    const extras = TIERS.flatMap(tier => byTier[tier].slice(1).map(t => `${TIER_ICON[tier]} ${t}`));
+    if (extras.length) lines.push(extras.join(' · '));
+    lines.push(sep);
+  }
+  return lines.join('\n');
+}
+
+// ── DB helpers ─────────────────────────────────────────────────────
 async function fetchPool(id) {
   const { data, error } = await db.from('pools').select('*').eq('id', id).single();
   if (error) return null;
@@ -197,7 +182,7 @@ async function fetchPool(id) {
 async function fetchUserPools() {
   const { data, error } = await db
     .from('pools').select('*')
-    .eq('owner_id', session.user.id)
+    .eq('owner_id', currentSession.user.id)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data || [];
@@ -206,17 +191,17 @@ async function fetchUserPools() {
 async function savePool(pool) {
   const { error } = await db.from('pools')
     .upsert({ ...pool, updated_at: new Date().toISOString() }, { onConflict: 'id' });
-  if (error) console.error('savePool error:', error.message);
+  if (error) throw error;
 }
 
 async function createPool(title, participantCount) {
   const id = nanoid(6);
   const { error } = await db.from('pools').insert({
-    id, owner_id: session.user.id, title,
+    id, owner_id: currentSession.user.id, title,
     participant_count: participantCount,
     participants: [], allocation: null,
     allocation_locked: false, eliminated_teams: [],
-    team_set: 'WC2026', tier_config: null,
+    team_set: 'WC2026',
   });
   if (error) throw error;
   return id;
@@ -227,666 +212,803 @@ async function deletePool(id) {
   if (error) throw error;
 }
 
-// ── Realtime ──────────────────────────────────────────────────────
+// ── Realtime ───────────────────────────────────────────────────────
 function cleanupRealtime() {
   if (realtimeChannel) { db.removeChannel(realtimeChannel); realtimeChannel = null; }
 }
 
 function subscribeToPool(poolId, onUpdate) {
   cleanupRealtime();
-  realtimeChannel = db.channel(`pool_${poolId}`)
+  realtimeChannel = db.channel(`pool-${poolId}`)
     .on('postgres_changes', {
       event: 'UPDATE', schema: 'public', table: 'pools', filter: `id=eq.${poolId}`,
     }, payload => onUpdate(payload.new))
     .subscribe();
 }
 
-// ── Header ────────────────────────────────────────────────────────
-function headerHTML(opts = {}) {
-  const { backTo, backLabel, pool } = opts;
-  const isDark = document.documentElement.dataset.theme !== 'light';
-  const themeIcon = isDark ? '☀️' : '🌙';
-
-  const left = backTo
-    ? `<a href="${backTo}" class="header-back">← ${escHtml(backLabel || 'Back')}</a>`
-    : `<a href="#/" class="header-brand">⚽ WCPool</a>`;
-
-  const center = pool
-    ? `<span class="header-pool-title">${escHtml(pool.title)}</span>`
-    : '';
-
-  const right = session
-    ? `<div class="header-user">
-        ${session.user.user_metadata?.avatar_url
-          ? `<img class="user-avatar" src="${escHtml(session.user.user_metadata.avatar_url)}" alt="" />`
-          : ''}
-        <span class="user-name">${escHtml(session.user.user_metadata?.name || session.user.email || '')}</span>
-        <button class="btn btn-sm" id="sign-out-btn">Sign out</button>
-       </div>`
-    : `<button class="btn btn-sm primary" id="sign-in-btn">Sign in with Google</button>`;
-
-  return `<header class="site-header">
-    <div class="header-left">${left}</div>
-    <div class="header-center">${center}</div>
-    <div class="header-right">
-      <button class="btn-icon theme-toggle" title="Toggle theme">${themeIcon}</button>
-      ${right}
-    </div>
-  </header>`;
+// ── Shared: allocation cards HTML ──────────────────────────────────
+function allocationCardsHTML(pool) {
+  if (!pool.allocation || !(pool.participants || []).length) {
+    return '<p class="hint center" style="padding:24px 0">Sin asignación todavía.</p>';
+  }
+  const eliminated = pool.eliminated_teams || [];
+  return (pool.participants || []).map(p => {
+    const teams = pool.allocation[p.id] || [];
+    const alive = teams.filter(t => !eliminated.includes(teamId(t))).length;
+    const out   = teams.length - alive;
+    const teamsHtml = teams.map(t => {
+      const isElim = eliminated.includes(teamId(t));
+      return `<li class="${isElim ? 'team-eliminated' : ''}">
+        <span class="tier-dot tier-${t.tier}"></span>
+        ${isElim ? '❌ ' : ''}${escHtml(t.flag)} ${escHtml(t.name)}
+      </li>`;
+    }).join('');
+    return `<div class="alloc-card">
+      <div class="alloc-card-name">
+        <span class="alloc-card-name-text">${escHtml(p.name)}</span>
+        <span class="alloc-card-count">${teams.length} equipos</span>
+      </div>
+      <span class="alloc-status">✅ ${alive} vivos · ❌ ${out} eliminados</span>
+      <ul class="team-list">${teamsHtml}</ul>
+    </div>`;
+  }).join('');
 }
 
-function bindHeaderEvents() {
-  document.querySelector('.theme-toggle')?.addEventListener('click', toggleTheme);
-  document.getElementById('sign-out-btn')?.addEventListener('click', () => db.auth.signOut());
-  document.getElementById('sign-in-btn')?.addEventListener('click', () => {
-    db.auth.signInWithOAuth({ provider: 'google',
-      options: { redirectTo: window.location.origin + window.location.pathname } });
+// ── Google SVG ─────────────────────────────────────────────────────
+const GOOGLE_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66 2.84-.81-.62z"/>
+  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+</svg>`;
+
+// ── Sign-in helper ─────────────────────────────────────────────────
+function signInWithGoogle() {
+  db.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: 'https://wc-pool-three.vercel.app/' },
   });
 }
 
-// ── Landing ───────────────────────────────────────────────────────
+// ── Landing page ───────────────────────────────────────────────────
 function renderLanding() {
   cleanupRealtime();
   document.getElementById('app').innerHTML = `
-    ${headerHTML()}
-    <main class="landing-main">
-      <div class="landing-box">
-        <div class="landing-logo">⚽</div>
-        <h1 class="landing-title">World Cup Pool</h1>
-        <p class="landing-desc">Manage your FIFA World Cup 2026 pool — fair team allocation, real-time updates, and one-tap WhatsApp sharing.</p>
-        <button class="btn-google" id="landing-sign-in">
-          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-          </svg>
-          Sign in with Google
-        </button>
-        <p class="byline">by NineInchTooL</p>
-      </div>
-    </main>
-    <footer class="site-footer"><span class="byline">by NineInchTooL</span></footer>
+    <div class="landing-page">
+      <header class="landing-header">
+        <span class="logo">⚽ WCPool</span>
+        <button class="theme-toggle" title="Toggle theme">${themeIcon()}</button>
+      </header>
+      <main class="landing-main">
+        <div class="landing-card">
+          <div class="landing-icon">⚽</div>
+          <h1 class="landing-title">WCPool</h1>
+          <p class="landing-subtitle">Create and manage your World Cup 2026 pool</p>
+          <div class="landing-divider"></div>
+          <button class="btn-google" id="landing-sign-in">${GOOGLE_ICON} Sign in with Google</button>
+        </div>
+      </main>
+      <footer class="landing-footer">by NineInchTooL</footer>
+    </div>
   `;
-  bindHeaderEvents();
-  document.getElementById('landing-sign-in')?.addEventListener('click', () => {
-    db.auth.signInWithOAuth({ provider: 'google',
-      options: { redirectTo: window.location.origin + window.location.pathname } });
-  });
+  document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
+  document.getElementById('landing-sign-in').addEventListener('click', signInWithGoogle);
 }
 
-// ── Dashboard ─────────────────────────────────────────────────────
+// ── Dashboard ──────────────────────────────────────────────────────
 async function renderDashboard() {
   cleanupRealtime();
-  document.getElementById('app').innerHTML = `
-    ${headerHTML()}
-    <main class="main-content">
-      <div class="dashboard-header">
-        <h2 class="page-title">Your Pools</h2>
-        <button class="btn primary" id="create-pool-btn">+ New Pool</button>
-      </div>
-      <div id="pool-grid" class="pool-grid"><div class="loading-spinner">Loading pools…</div></div>
-    </main>
-    <footer class="site-footer"><span class="byline">by NineInchTooL</span></footer>
+  const user   = currentSession.user;
+  const avatar = user.user_metadata?.avatar_url;
+  const name   = user.user_metadata?.name || user.email || '';
 
+  document.getElementById('app').innerHTML = `
+    <header class="site-header">
+      <div class="header-left">
+        <span class="logo">⚽ WCPool</span>
+      </div>
+      <div class="header-right">
+        <div class="user-info">
+          ${avatar ? `<img class="user-avatar" src="${escHtml(avatar)}" alt="" />` : ''}
+          <span class="user-name">${escHtml(name)}</span>
+        </div>
+        <button class="btn btn-sm btn-ghost" id="sign-out-btn">Sign out</button>
+        <button class="theme-toggle" title="Toggle theme">${themeIcon()}</button>
+      </div>
+    </header>
+    <main class="main-content">
+      <div class="page-heading">
+        <h1>My Pools <span class="count-badge" id="pool-count-badge">…</span></h1>
+        <button class="btn btn-primary" id="create-pool-btn">＋ Create New Pool</button>
+      </div>
+      <div id="dashboard-content"><span class="loading-spinner-sm"></span> Loading pools…</div>
+    </main>
+    <footer class="site-footer">by NineInchTooL</footer>
+
+    <!-- Create pool modal -->
     <div id="create-modal" class="modal hidden">
       <div class="modal-box">
-        <h2>Create New Pool</h2>
-        <label>Pool title
-          <input type="text" id="new-pool-title" placeholder="e.g. Family Pool 2026" />
+        <h2 class="modal-title">New Pool</h2>
+        <label class="field">Pool title
+          <input type="text" id="new-title" value="My WC2026 Pool" />
         </label>
-        <label>Participants (2–48)
-          <div class="range-row">
-            <input type="range" id="new-pool-count" min="2" max="48" value="10" />
-            <span id="new-pool-count-display" class="range-value">10</span>
+        <label class="field">Participants
+          <div class="modal-range-row">
+            <input type="range" id="new-count" min="2" max="48" value="10" />
+            <span class="modal-range-val" id="new-count-val">10</span>
           </div>
+          <span class="count-helper" id="count-helper">With 10 players, each gets 4–5 teams</span>
         </label>
-        <label>Team set
-          <input type="text" value="FIFA World Cup 2026" readonly class="input-readonly" />
+        <label class="field">Team set
+          <input type="text" value="FIFA World Cup 2026 — 48 teams, 4 tiers" readonly />
         </label>
-        <p id="create-error" class="error hidden"></p>
+        <p class="error-msg hidden" id="create-error"></p>
         <div class="modal-actions">
-          <button id="create-cancel-btn">Cancel</button>
-          <button class="btn primary" id="create-submit-btn">Create</button>
+          <button class="btn" id="create-cancel">Cancel</button>
+          <button class="btn btn-primary" id="create-submit">Create Pool</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete confirm modal -->
+    <div id="delete-modal" class="modal hidden">
+      <div class="modal-box">
+        <h2 class="modal-title">Delete pool?</h2>
+        <p id="delete-modal-text" style="color:var(--color-text-muted);font-size:.9rem"></p>
+        <p class="error-msg hidden" id="delete-modal-err"></p>
+        <div class="modal-actions">
+          <button class="btn" id="delete-cancel">Cancel</button>
+          <button class="btn btn-danger" id="delete-confirm">Delete permanently</button>
         </div>
       </div>
     </div>
   `;
-  bindHeaderEvents();
+
+  document.getElementById('sign-out-btn').addEventListener('click', () => db.auth.signOut());
+  document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
 
   let pools = [];
-  try { pools = await fetchUserPools(); }
-  catch { document.getElementById('pool-grid').innerHTML = '<p class="error center">Failed to load pools.</p>'; return; }
-  renderPoolGrid(pools);
-
-  const MAX_POOLS = 10;
-  const createBtn = document.getElementById('create-pool-btn');
-  if (pools.length >= MAX_POOLS) {
-    createBtn.disabled = true;
-    createBtn.title = 'Pool limit reached (10/10)';
+  try {
+    pools = await fetchUserPools();
+  } catch {
+    document.getElementById('dashboard-content').innerHTML =
+      '<p class="error-msg">Failed to load pools. Please refresh.</p>';
+    return;
   }
 
-  const modal = document.getElementById('create-modal');
-  const countSlider = document.getElementById('new-pool-count');
-  const countDisplay = document.getElementById('new-pool-count-display');
+  renderPoolGrid(pools);
+  bindDashboardModals(pools);
+}
 
-  createBtn.addEventListener('click', () => modal.classList.remove('hidden'));
-  document.getElementById('create-cancel-btn').addEventListener('click', () => modal.classList.add('hidden'));
+function renderPoolGrid(pools) {
+  const MAX = 10;
+  document.getElementById('pool-count-badge').textContent = `${pools.length} / ${MAX}`;
+
+  const createBtn = document.getElementById('create-pool-btn');
+  if (pools.length >= MAX) {
+    createBtn.disabled = true;
+  }
+
+  const container = document.getElementById('dashboard-content');
+  if (!pools.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🏆</div>
+        <p class="empty-state-title">No pools yet</p>
+        <p class="empty-state-desc">Create your first pool to get started!</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="pool-grid">${pools.map(poolCardHTML).join('')}</div>
+    ${pools.length >= MAX ? '<p class="limit-msg">You\'ve reached the 10 pool limit.</p>' : ''}`;
+}
+
+function poolCardHTML(pool) {
+  const badges = [
+    pool.allocation        ? '<span class="badge badge-success">✅ Allocated</span>' : '',
+    pool.allocation_locked ? '<span class="badge badge-warning">🔒 Locked</span>'   : '',
+  ].filter(Boolean).join('');
+
+  return `<div class="pool-card" data-id="${escHtml(pool.id)}">
+    <div class="pool-card-title">${escHtml(pool.title)}</div>
+    <div class="pool-card-meta">${pool.participant_count} players</div>
+    <div class="pool-card-badges">${badges}</div>
+    <div class="pool-card-actions">
+      <a href="#/pool/${pool.id}" class="btn btn-sm">👁 View</a>
+      <a href="#/pool/${pool.id}/admin" class="btn btn-sm btn-primary">⚙ Admin</a>
+      <span class="spacer"></span>
+      <button class="btn-icon delete-pool-btn" data-id="${escHtml(pool.id)}" data-title="${escHtml(pool.title)}" title="Delete pool">🗑</button>
+    </div>
+  </div>`;
+}
+
+function bindDashboardModals(pools) {
+  const modal    = document.getElementById('create-modal');
+  const countEl  = document.getElementById('new-count');
+  const countVal = document.getElementById('new-count-val');
+  const helper   = document.getElementById('count-helper');
+  const errEl    = document.getElementById('create-error');
+
+  function updateHelper(n) {
+    const lo = Math.floor(48 / n), hi = Math.ceil(48 / n);
+    helper.textContent = `With ${n} players, each gets ${lo === hi ? lo : `${lo}–${hi}`} teams`;
+  }
+
+  document.getElementById('create-pool-btn').addEventListener('click', () => {
+    modal.classList.remove('hidden');
+    document.getElementById('new-title').focus();
+  });
+  document.getElementById('create-cancel').addEventListener('click', () => modal.classList.add('hidden'));
   modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
-  countSlider.addEventListener('input', () => { countDisplay.textContent = countSlider.value; });
 
-  document.getElementById('create-submit-btn').addEventListener('click', async () => {
-    const title = document.getElementById('new-pool-title').value.trim();
-    const count = parseInt(countSlider.value);
-    const errEl = document.getElementById('create-error');
+  countEl.addEventListener('input', () => {
+    countVal.textContent = countEl.value;
+    updateHelper(+countEl.value);
+  });
+
+  document.getElementById('create-submit').addEventListener('click', async () => {
+    const title = document.getElementById('new-title').value.trim();
+    const count = +countEl.value;
     errEl.classList.add('hidden');
     if (!title) { errEl.textContent = 'Please enter a pool title.'; errEl.classList.remove('hidden'); return; }
-    const btn = document.getElementById('create-submit-btn');
-    btn.disabled = true; btn.textContent = 'Creating…';
+    const btn = document.getElementById('create-submit');
+    btn.disabled = true; btn.innerHTML = '<span class="loading-spinner-sm"></span> Creating…';
     try {
       const id = await createPool(title, count);
+      modal.classList.add('hidden');
       navigate(`#/pool/${id}/admin`);
     } catch {
       errEl.textContent = 'Failed to create pool. Try again.';
       errEl.classList.remove('hidden');
-      btn.disabled = false; btn.textContent = 'Create';
+      btn.disabled = false; btn.textContent = 'Create Pool';
+    }
+  });
+
+  // Delete modal
+  const delModal = document.getElementById('delete-modal');
+  let pendingDeleteId = null;
+
+  document.getElementById('dashboard-content').addEventListener('click', e => {
+    const btn = e.target.closest('.delete-pool-btn');
+    if (!btn) return;
+    pendingDeleteId = btn.dataset.id;
+    document.getElementById('delete-modal-text').textContent =
+      `This will permanently delete "${btn.dataset.title}" and all its data.`;
+    document.getElementById('delete-modal-err').classList.add('hidden');
+    delModal.classList.remove('hidden');
+  });
+  document.getElementById('delete-cancel').addEventListener('click', () => delModal.classList.add('hidden'));
+  delModal.addEventListener('click', e => { if (e.target === delModal) delModal.classList.add('hidden'); });
+
+  document.getElementById('delete-confirm').addEventListener('click', async () => {
+    if (!pendingDeleteId) return;
+    const errEl2 = document.getElementById('delete-modal-err');
+    try {
+      await deletePool(pendingDeleteId);
+      delModal.classList.add('hidden');
+      await renderDashboard();
+    } catch {
+      errEl2.textContent = 'Failed to delete. Try again.';
+      errEl2.classList.remove('hidden');
     }
   });
 }
 
-function renderPoolGrid(pools) {
-  const grid = document.getElementById('pool-grid');
-  if (!grid) return;
-  const MAX_POOLS = 10;
-  if (!pools.length) {
-    grid.innerHTML = '<p class="hint center">No pools yet. Create your first pool!</p>';
-    return;
-  }
-  grid.innerHTML = `
-    <p class="hint pool-count">${pools.length} / ${MAX_POOLS} pools</p>
-    <div class="pool-cards">
-      ${pools.map(pool => {
-        const pCount = (pool.participants || []).length;
-        const lockedBadge = pool.allocation_locked ? '<span class="badge badge-locked">🔒 Locked</span>' : '';
-        const allocBadge = pool.allocation ? '<span class="badge badge-alloc">✅ Allocated</span>' : '';
-        return `<div class="pool-card">
-          <div class="pool-card-title">${escHtml(pool.title)}</div>
-          <div class="pool-card-meta">
-            <span>👥 ${pCount} / ${pool.participant_count}</span>
-            ${lockedBadge}${allocBadge}
-          </div>
-          <div class="pool-card-actions">
-            <a href="#/pool/${pool.id}" class="btn btn-sm">👁 View</a>
-            <a href="#/pool/${pool.id}/admin" class="btn btn-sm primary">⚙️ Admin</a>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>
-  `;
-}
-
-// ── Viewer ────────────────────────────────────────────────────────
+// ── Viewer mode ────────────────────────────────────────────────────
 async function renderViewer(poolId) {
   cleanupRealtime();
+
   document.getElementById('app').innerHTML = `
-    ${headerHTML({ backTo: '#/', backLabel: 'Home' })}
-    <div id="pool-title-hero">
-      <h1 id="pool-title-display">Loading…</h1>
-      <span class="byline">by NineInchTooL</span>
+    <header class="site-header">
+      <div class="header-left">
+        <a href="#/" class="header-back">← My Pools</a>
+      </div>
+      <div class="header-center">
+        <span class="byline">by NineInchTooL</span>
+      </div>
+      <div class="header-right" id="viewer-header-right">
+        <button class="theme-toggle" title="Toggle theme">${themeIcon()}</button>
+      </div>
+    </header>
+    <div id="pool-hero-wrap"></div>
+    <div class="main-content" id="viewer-content">
+      <div class="center" style="padding:40px 0"><span class="loading-spinner"></span></div>
     </div>
-    <main class="main-content" id="viewer-main">
-      <div class="loading-spinner">Loading pool…</div>
-    </main>
-    <footer class="site-footer"><span class="byline">by NineInchTooL</span></footer>
+    <footer class="site-footer">by NineInchTooL</footer>
   `;
-  bindHeaderEvents();
+  document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
 
   const pool = await fetchPool(poolId);
   if (!pool) {
-    document.getElementById('pool-title-display').textContent = 'Pool not found';
-    document.getElementById('viewer-main').innerHTML = '<p class="hint center">This pool does not exist or has been deleted.</p>';
+    document.getElementById('pool-hero-wrap').innerHTML = '';
+    document.getElementById('viewer-content').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🤷</div>
+        <p class="empty-state-title">Pool not found</p>
+        <a href="#/" class="btn btn-sm" style="margin-top:8px">← Go home</a>
+      </div>`;
     return;
   }
 
-  document.getElementById('pool-title-display').textContent = pool.title;
-  renderViewerContent(pool);
+  // Add admin button if current user is owner
+  if (currentSession && pool.owner_id === currentSession.user.id) {
+    document.getElementById('viewer-header-right').insertAdjacentHTML('afterbegin',
+      `<a href="#/pool/${poolId}/admin" class="btn btn-sm btn-primary">⚙ Admin</a>`);
+  }
 
-  subscribeToPool(poolId, updated => {
-    document.getElementById('pool-title-display').textContent = updated.title;
-    renderViewerContent(updated);
-  });
+  renderViewerContent(pool);
+  subscribeToPool(poolId, updated => renderViewerContent(updated));
 }
 
 function renderViewerContent(pool) {
-  const container = document.getElementById('viewer-main');
-  if (!container) return;
-  if (!pool.allocation || !(pool.participants || []).length) {
-    container.innerHTML = '<p class="hint center">No allocation yet.</p>';
-    return;
-  }
-  container.innerHTML = `
-    ${pool.allocation_locked ? '<div id="lock-badge">🔒 Allocation locked</div>' : ''}
-    <div id="allocation-grid"></div>
-  `;
-  renderAllocationCards(pool, document.getElementById('allocation-grid'));
+  const heroWrap = document.getElementById('pool-hero-wrap');
+  const content  = document.getElementById('viewer-content');
+  if (!heroWrap || !content) return;
+
+  heroWrap.innerHTML = `
+    <div class="pool-hero">
+      <h1 class="pool-hero-title">${escHtml(pool.title)}</h1>
+      <span class="byline">by NineInchTooL</span>
+    </div>`;
+
+  const lockNotice = pool.allocation_locked
+    ? '<p class="lock-notice">🔒 Allocation locked</p>' : '';
+
+  content.innerHTML = lockNotice + `<div class="alloc-grid">${allocationCardsHTML(pool)}</div>`;
 }
 
-// ── Shared: allocation cards ───────────────────────────────────────
-function renderAllocationCards(pool, container) {
-  if (!container) return;
-  container.innerHTML = '';
-  const eliminated = pool.eliminated_teams || [];
-  for (const p of (pool.participants || [])) {
-    const teams = (pool.allocation || {})[p.id] || [];
-    const alive = teams.filter(t => !eliminated.includes(t.name)).length;
-    const out = teams.length - alive;
-    const statusBadge = `<span class="alloc-status">${out > 0 ? `✅ ${alive} alive · ❌ ${out} out` : `✅ ${alive} alive`}</span>`;
-    const teamItems = teams.map(t => {
-      const isElim = eliminated.includes(t.name);
-      return `<li class="${isElim ? 'team-eliminated' : ''}"><span class="tier-dot tier-${t.tier}"></span>${isElim ? '❌ ' : ''}${escHtml(t.name)}</li>`;
-    }).join('');
-    const card = document.createElement('div');
-    card.className = 'alloc-card';
-    card.innerHTML = `
-      <div class="alloc-name">
-        ${escHtml(p.name)}
-        <span style="font-size:.75rem;color:var(--text-muted);font-weight:400">${teams.length} teams</span>
-      </div>
-      ${statusBadge}
-      <ul class="team-list">${teamItems}</ul>
-    `;
-    container.appendChild(card);
-  }
-}
-
-// ── Admin ─────────────────────────────────────────────────────────
+// ── Admin mode ─────────────────────────────────────────────────────
 async function renderAdmin(poolId) {
   cleanupRealtime();
-  const app = document.getElementById('app');
 
-  if (!session) {
-    app.innerHTML = `
-      ${headerHTML()}
-      <main class="main-content">
-        <div class="card auth-prompt">
-          <p>Sign in to access pool admin.</p>
-          <button class="btn-google" id="admin-sign-in">
-            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-            </svg>
-            Sign in with Google
-          </button>
-        </div>
-      </main>
-    `;
-    bindHeaderEvents();
-    document.getElementById('admin-sign-in')?.addEventListener('click', () => {
-      db.auth.signInWithOAuth({ provider: 'google',
-        options: { redirectTo: window.location.origin + window.location.pathname } });
-    });
+  if (!currentSession) {
+    sessionStorage.setItem('wcpool_redirect', window.location.hash);
+    navigate('#/');
     return;
   }
 
-  app.innerHTML = `
-    ${headerHTML({ backTo: `#/pool/${poolId}`, backLabel: 'View pool' })}
+  document.getElementById('app').innerHTML = `
+    <header class="site-header">
+      <div class="header-left">
+        <a href="#/" class="header-back">← My Pools</a>
+      </div>
+      <div class="header-right">
+        <a href="#/pool/${poolId}" class="btn btn-sm btn-ghost">👁 Viewer</a>
+        <button class="theme-toggle" title="Toggle theme">${themeIcon()}</button>
+      </div>
+    </header>
     <main class="main-content" id="admin-main">
-      <div class="loading-spinner">Loading…</div>
+      <div class="center" style="padding:40px 0"><span class="loading-spinner"></span></div>
     </main>
-    <footer class="site-footer"><span class="byline">by NineInchTooL</span></footer>
+    <footer class="site-footer">by NineInchTooL</footer>
   `;
-  bindHeaderEvents();
+  document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
 
-  const pool = await fetchPool(poolId);
+  let pool;
+  try { pool = await fetchPool(poolId); } catch { pool = null; }
+
+  const main = document.getElementById('admin-main');
   if (!pool) {
-    document.getElementById('admin-main').innerHTML = '<p class="error center">Pool not found.</p>';
-    return;
+    main.innerHTML = '<p class="error-msg center" style="padding:40px 0">Pool not found.</p>'; return;
   }
-  if (pool.owner_id !== session.user.id) {
-    document.getElementById('admin-main').innerHTML = '<p class="error center">Access denied — you are not the owner of this pool.</p>';
-    return;
+  if (pool.owner_id !== currentSession.user.id) {
+    main.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🔒</div>
+        <p class="empty-state-title">Access denied</p>
+        <p class="empty-state-desc">You are not the owner of this pool.</p>
+        <a href="#/" class="btn btn-sm" style="margin-top:8px">← Go home</a>
+      </div>`; return;
   }
 
   renderAdminPanel(pool);
 }
 
 function renderAdminPanel(pool) {
-  const main = document.getElementById('admin-main');
-  if (!main) return;
+  const main   = document.getElementById('admin-main');
   const locked = pool.allocation_locked;
+  const hasAlloc = !!pool.allocation;
+  const pCount = (pool.participants || []).length;
+  const extras = 12 % (pool.participant_count || 1) > 0;
 
   main.innerHTML = `
-    <div class="admin-heading">
-      <h2 class="page-title" id="admin-page-title">${escHtml(pool.title)}</h2>
-      <span class="hint">Admin Panel</span>
-    </div>
-
-    <!-- Settings -->
-    <div class="card">
-      <h3>Pool Settings</h3>
-      <label>Title
-        <input type="text" id="admin-title" value="${escHtml(pool.title)}" />
-      </label>
-      <label>Participants (2–48)
-        <div class="range-row">
-          <input type="range" id="admin-count" min="2" max="48" value="${pool.participant_count}" />
-          <span id="admin-count-display" class="range-value">${pool.participant_count}</span>
-        </div>
-      </label>
-      <div class="row">
-        <button class="btn primary" id="save-settings-btn">Save settings</button>
-        <button class="btn btn-sm" id="copy-link-btn">📋 Copy viewer link</button>
+    <!-- Title + settings -->
+    <div class="card" style="gap:10px">
+      <div class="admin-title-wrap">
+        <span class="pool-title-editable" id="admin-title-el">${escHtml(pool.title)}</span>
+        <span class="admin-title-label">Admin Panel</span>
       </div>
+      <div class="participant-count-row">
+        <span id="p-count-display">${pool.participant_count} players</span>
+        <button class="change-link" id="change-count-btn">· change</button>
+      </div>
+      <div id="count-change-wrap" class="hidden row">
+        <input type="number" id="count-change-input" min="2" max="48" value="${pool.participant_count}" style="width:80px" />
+        <button class="btn btn-sm btn-primary" id="count-change-save">Save</button>
+        <button class="btn btn-sm" id="count-change-cancel">Cancel</button>
+        <span class="error-msg hidden" id="count-change-err"></span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm" id="copy-link-btn">📋 Share viewer link</button>
+        <button class="btn btn-sm" id="copy-wa-btn" ${hasAlloc ? '' : 'disabled'}>📋 Copy for WhatsApp</button>
+      </div>
+      <p class="error-msg hidden" id="settings-error"></p>
     </div>
 
     <!-- Participants -->
     <div class="card">
       <h3>Participants</h3>
-      <div id="participants-list"></div>
-      <div class="row">
-        <input type="text" id="new-participant-name" placeholder="Name" />
-        <label class="checkbox-label">
-          <input type="checkbox" id="new-participant-extra" /> Extra team
-        </label>
-        <button class="btn primary" id="add-participant-btn">Add</button>
+      <p class="participant-counter ${pCount >= pool.participant_count ? 'full' : ''}" id="p-counter">
+        ${pCount} / ${pool.participant_count} participants added
+      </p>
+      <div class="participants-list" id="participants-list"></div>
+      <div class="add-participant-form">
+        <input type="text" id="new-p-name" placeholder="Name" ${pCount >= pool.participant_count ? 'disabled' : ''} />
+        ${extras ? `<label class="checkbox-row"><input type="checkbox" id="new-p-extra" /> Extra team</label>` : ''}
+        <button class="btn btn-sm btn-primary" id="add-p-btn" ${pCount >= pool.participant_count ? 'disabled' : ''}>Add</button>
       </div>
-      <p class="hint">Teams distribute as evenly as possible across all 4 tiers. "Extra team" participants are prioritized when the total doesn't divide evenly.</p>
+      ${extras ? '<p class="hint">Mark "Extra team" to flag a participant as priority for an extra team when totals don\'t divide evenly.</p>' : ''}
     </div>
 
-    <!-- Elimination Tracker -->
-    <details class="card">
-      <summary class="card-summary"><h3>⚽ Elimination Tracker</h3></summary>
-      <div id="elimination-tracker-body"></div>
+    <!-- Elimination tracker -->
+    <details class="card elim-card">
+      <summary>
+        <span class="elim-summary-title">⚽ Elimination Tracker</span>
+        <span class="elim-summary-arrow">▸</span>
+      </summary>
+      <div id="elim-body"></div>
     </details>
 
-    <!-- Allocation -->
+    <!-- Allocation controls -->
     <div class="card">
       <h3>Allocation</h3>
-      <button class="btn primary big" id="allocate-btn" ${locked ? 'disabled' : ''} style="${locked ? 'opacity:.45' : ''}">🎲 Randomize &amp; Allocate</button>
-      <div class="row">
-        <button class="btn danger" id="clear-alloc-btn" ${locked ? 'disabled' : ''} style="${locked ? 'opacity:.45' : ''}">Clear allocation</button>
-        <button class="btn" id="lock-alloc-btn">${locked ? '🔓 Unlock' : '🔒 Lock allocation'}</button>
+      <div class="alloc-actions">
+        <button class="btn btn-primary" id="allocate-btn" ${locked || !pCount ? 'disabled' : ''}>🎲 Allocate Teams</button>
+        <button class="btn" id="lock-btn">${locked ? '🔓 Unlock' : '🔒 Lock'} Allocation</button>
+        <button class="btn btn-danger btn-sm" id="clear-alloc-btn" ${locked || !hasAlloc ? 'disabled' : ''}>Clear</button>
       </div>
-      <p id="alloc-status" class="hint"></p>
+      <p class="hint" id="alloc-hint">${locked ? '🔒 Allocation is locked.' : hasAlloc ? 'Allocation assigned.' : 'No allocation yet.'}</p>
     </div>
 
-    <!-- Allocation cards -->
-    <div id="admin-allocation-grid"></div>
+    <!-- Allocation preview -->
+    <div id="admin-alloc-grid" class="alloc-grid">${hasAlloc ? allocationCardsHTML(pool) : ''}</div>
 
-    <!-- Export -->
-    <div class="card" id="export-card" ${pool.allocation ? '' : 'style="display:none"'}>
-      <h3>Export for WhatsApp</h3>
-      <textarea id="export-text" rows="14" readonly></textarea>
-      <button class="btn primary" id="copy-export-btn">📋 Copy to clipboard</button>
-      <p id="copy-feedback" class="hint hidden">Copied!</p>
+    <!-- WhatsApp export -->
+    <div class="card" id="export-card" ${hasAlloc ? '' : 'style="display:none"'}>
+      <h3>WhatsApp Export</h3>
+      <textarea id="export-text" rows="12" readonly>${escHtml(buildExportText(pool))}</textarea>
+      <button class="btn btn-sm btn-primary" id="copy-export-btn">📋 Copy to clipboard</button>
     </div>
 
     <!-- Danger zone -->
-    <div class="card danger-zone">
+    <div class="card danger-card">
       <h3>Danger Zone</h3>
-      <button class="btn danger" id="delete-pool-btn">🗑 Delete this pool</button>
+      <button class="btn btn-danger btn-sm" id="delete-pool-btn">🗑 Delete this pool</button>
     </div>
 
-    <!-- Delete confirm modal -->
-    <div id="delete-modal" class="modal hidden">
+    <!-- Delete modal -->
+    <div id="del-confirm-modal" class="modal hidden">
       <div class="modal-box">
-        <h2>Delete pool?</h2>
-        <p>This will permanently delete <strong>${escHtml(pool.title)}</strong> and all its data. This cannot be undone.</p>
+        <h2 class="modal-title">Delete pool?</h2>
+        <p style="color:var(--color-text-muted);font-size:.9rem">This will permanently delete <strong>${escHtml(pool.title)}</strong> and all its data.</p>
         <div class="modal-actions">
-          <button id="delete-cancel-btn">Cancel</button>
-          <button class="btn danger" id="delete-confirm-btn">Delete permanently</button>
+          <button class="btn" id="del-cancel">Cancel</button>
+          <button class="btn btn-danger" id="del-confirm">Delete permanently</button>
         </div>
       </div>
     </div>
   `;
 
-  // Settings
-  document.getElementById('admin-count').addEventListener('input', e => {
-    document.getElementById('admin-count-display').textContent = e.target.value;
-  });
-  document.getElementById('save-settings-btn').addEventListener('click', async () => {
-    const title = document.getElementById('admin-title').value.trim();
-    const count = parseInt(document.getElementById('admin-count').value);
-    if (!title) return;
-    pool.title = title;
-    pool.participant_count = count;
-    await savePool(pool);
-    document.getElementById('admin-page-title').textContent = title;
-  });
-  document.getElementById('copy-link-btn').addEventListener('click', async e => {
-    await copyText(`https://wc-pool-three.vercel.app/#/pool/${pool.id}`, e.currentTarget);
-  });
-
-  // Participants
-  bindParticipantsList(pool);
-
-  // Elimination tracker
+  renderParticipantsList(pool);
   renderEliminationTracker(pool);
+  bindAdminEvents(pool);
+}
 
-  // Allocation
-  document.getElementById('allocate-btn').addEventListener('click', async () => {
-    if (pool.allocation_locked) return;
-    if (!(pool.participants || []).length) {
-      document.getElementById('alloc-status').textContent = 'Add participants first.';
-      return;
+function bindAdminEvents(pool) {
+  bindTitleEdit(pool);
+
+  // Participant count change
+  document.getElementById('change-count-btn').addEventListener('click', () => {
+    document.getElementById('count-change-wrap').classList.remove('hidden');
+    document.getElementById('count-change-input').focus();
+  });
+  document.getElementById('count-change-cancel').addEventListener('click', () => {
+    document.getElementById('count-change-wrap').classList.add('hidden');
+  });
+  document.getElementById('count-change-save').addEventListener('click', async () => {
+    const val  = +document.getElementById('count-change-input').value;
+    const errEl = document.getElementById('count-change-err');
+    if (!val || val < 2 || val > 48) {
+      errEl.textContent = 'Must be 2–48.'; errEl.classList.remove('hidden'); return;
     }
+    pool.participant_count = val;
+    try { await savePool(pool); renderAdminPanel(pool); }
+    catch { errEl.textContent = 'Save failed.'; errEl.classList.remove('hidden'); }
+  });
+
+  // Share / export
+  document.getElementById('copy-link-btn').addEventListener('click', async e => {
+    await copyToClipboard(`https://wc-pool-three.vercel.app/#/pool/${pool.id}`, e.currentTarget);
+  });
+  document.getElementById('copy-wa-btn').addEventListener('click', async e => {
+    await copyToClipboard(buildExportText(pool), e.currentTarget);
+  });
+  document.getElementById('copy-export-btn')?.addEventListener('click', async e => {
+    await copyToClipboard(document.getElementById('export-text').value, e.currentTarget);
+  });
+
+  // Add participant
+  document.getElementById('add-p-btn').addEventListener('click', () => addParticipant(pool));
+  document.getElementById('new-p-name').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addParticipant(pool);
+  });
+
+  // Allocate
+  document.getElementById('allocate-btn').addEventListener('click', async () => {
+    if (pool.allocation_locked || !pool.participants?.length) return;
+    if (pool.allocation && !confirm('This will re-randomize the current allocation. Are you sure?')) return;
     pool.allocation = allocate(pool.participants);
-    await savePool(pool);
-    refreshAdminAllocation(pool);
-    document.getElementById('alloc-status').textContent =
-      `Allocated ${TEAMS.length} teams across ${pool.participants.length} participants.`;
+    try { await savePool(pool); refreshAllocUI(pool); }
+    catch { showAdminError('Failed to save allocation.'); }
   });
 
-  document.getElementById('clear-alloc-btn').addEventListener('click', async () => {
-    if (pool.allocation_locked) return;
-    if (!confirm('Clear the current allocation?')) return;
-    pool.allocation = null;
-    await savePool(pool);
-    refreshAdminAllocation(pool);
-    document.getElementById('alloc-status').textContent = 'Allocation cleared.';
-  });
-
-  document.getElementById('lock-alloc-btn').addEventListener('click', async () => {
+  // Lock / unlock
+  document.getElementById('lock-btn').addEventListener('click', async () => {
     if (pool.allocation_locked) {
-      if (!confirm('Unlock the allocation? This will allow re-randomizing.')) return;
+      if (!confirm('Unlock the allocation?')) return;
       pool.allocation_locked = false;
     } else {
       pool.allocation_locked = true;
     }
+    try {
+      await savePool(pool);
+      document.getElementById('lock-btn').textContent =
+        pool.allocation_locked ? '🔓 Unlock Allocation' : '🔒 Lock Allocation';
+      document.getElementById('allocate-btn').disabled = pool.allocation_locked;
+      document.getElementById('clear-alloc-btn').disabled = pool.allocation_locked || !pool.allocation;
+      document.getElementById('alloc-hint').textContent =
+        pool.allocation_locked ? '🔒 Allocation is locked.' : 'Allocation unlocked.';
+    } catch { showAdminError('Failed to save.'); }
+  });
+
+  // Clear allocation
+  document.getElementById('clear-alloc-btn').addEventListener('click', async () => {
+    if (pool.allocation_locked) return;
+    if (!confirm('Clear the current allocation?')) return;
+    pool.allocation = null;
+    try { await savePool(pool); refreshAllocUI(pool); }
+    catch { showAdminError('Failed to clear allocation.'); }
+  });
+
+  // Delete pool
+  const delModal = document.getElementById('del-confirm-modal');
+  document.getElementById('delete-pool-btn').addEventListener('click', () => delModal.classList.remove('hidden'));
+  document.getElementById('del-cancel').addEventListener('click', () => delModal.classList.add('hidden'));
+  delModal.addEventListener('click', e => { if (e.target === delModal) delModal.classList.add('hidden'); });
+  document.getElementById('del-confirm').addEventListener('click', async () => {
+    try { await deletePool(pool.id); navigate('#/'); }
+    catch { showAdminError('Failed to delete pool.'); }
+  });
+}
+
+function showAdminError(msg) {
+  const el = document.getElementById('settings-error');
+  if (!el) return;
+  el.textContent = msg; el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 4000);
+}
+
+function bindTitleEdit(pool) {
+  const el = document.getElementById('admin-title-el');
+  if (!el) return;
+  el.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = pool.title;
+    input.className = 'pool-title-edit-input';
+    el.replaceWith(input);
+    input.focus(); input.select();
+    const save = async () => {
+      const val = input.value.trim() || pool.title;
+      pool.title = val;
+      try { await savePool(pool); } catch { /* silent */ }
+      const span = document.createElement('span');
+      span.id = 'admin-title-el';
+      span.className = 'pool-title-editable';
+      span.textContent = val;
+      input.replaceWith(span);
+      bindTitleEdit(pool);
+    };
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') input.blur();
+      if (e.key === 'Escape') { input.value = pool.title; input.blur(); }
+    });
+  });
+}
+
+function refreshAllocUI(pool) {
+  const grid     = document.getElementById('admin-alloc-grid');
+  const card     = document.getElementById('export-card');
+  const waBtn    = document.getElementById('copy-wa-btn');
+  const clearBtn = document.getElementById('clear-alloc-btn');
+  const hint     = document.getElementById('alloc-hint');
+  const allocBtn = document.getElementById('allocate-btn');
+  const et       = document.getElementById('export-text');
+
+  if (grid)     grid.innerHTML     = pool.allocation ? allocationCardsHTML(pool) : '';
+  if (card)     card.style.display = pool.allocation ? '' : 'none';
+  if (waBtn)    waBtn.disabled     = !pool.allocation;
+  if (clearBtn) clearBtn.disabled  = !pool.allocation || pool.allocation_locked;
+  if (hint)     hint.textContent   = pool.allocation ? 'Allocation assigned.' : 'No allocation yet.';
+  if (allocBtn) allocBtn.disabled  = pool.allocation_locked || !pool.participants?.length;
+  if (et)       et.value           = buildExportText(pool);
+}
+
+// ── Participants ───────────────────────────────────────────────────
+async function addParticipant(pool) {
+  const nameInput  = document.getElementById('new-p-name');
+  const extraInput = document.getElementById('new-p-extra');
+  const name = nameInput?.value.trim();
+  if (!name) return;
+  if ((pool.participants || []).length >= pool.participant_count) return;
+  pool.participants = [...(pool.participants || []), { id: uid(), name, extraTeam: extraInput?.checked || false }];
+  nameInput.value = '';
+  if (extraInput) extraInput.checked = false;
+  try {
     await savePool(pool);
-    const lk = pool.allocation_locked;
-    document.getElementById('lock-alloc-btn').textContent = lk ? '🔓 Unlock' : '🔒 Lock allocation';
-    const ab = document.getElementById('allocate-btn');
-    const cb = document.getElementById('clear-alloc-btn');
-    [ab, cb].forEach(b => { b.disabled = lk; b.style.opacity = lk ? '.45' : ''; });
-  });
-
-  // Export
-  document.getElementById('copy-export-btn')?.addEventListener('click', async e => {
-    await copyText(document.getElementById('export-text').value, e.currentTarget);
-  });
-
-  // Delete
-  document.getElementById('delete-pool-btn').addEventListener('click', () => {
-    document.getElementById('delete-modal').classList.remove('hidden');
-  });
-  document.getElementById('delete-cancel-btn').addEventListener('click', () => {
-    document.getElementById('delete-modal').classList.add('hidden');
-  });
-  document.getElementById('delete-confirm-btn').addEventListener('click', async () => {
-    await deletePool(pool.id);
-    navigate('#/');
-  });
-
-  refreshAdminAllocation(pool);
+    renderParticipantsList(pool);
+    updateParticipantCounter(pool);
+    refreshAllocUI(pool);
+  } catch { showAdminError('Failed to add participant.'); }
 }
 
-function refreshAdminAllocation(pool) {
-  const grid = document.getElementById('admin-allocation-grid');
-  const exportCard = document.getElementById('export-card');
-  if (!grid) return;
-  grid.innerHTML = '';
-  if (!pool.allocation || !(pool.participants || []).length) {
-    if (exportCard) exportCard.style.display = 'none';
-    return;
-  }
-  if (exportCard) exportCard.style.display = '';
-  renderAllocationCards(pool, grid);
-  const et = document.getElementById('export-text');
-  if (et) et.value = buildExportText(pool);
-}
-
-// ── Admin: participants ───────────────────────────────────────────
-function bindParticipantsList(pool) {
-  renderParticipantsListUI(pool);
-
-  document.getElementById('add-participant-btn').addEventListener('click', async () => {
-    const nameInput = document.getElementById('new-participant-name');
-    const extraInput = document.getElementById('new-participant-extra');
-    const name = nameInput.value.trim();
-    if (!name) return;
-    if ((pool.participants || []).length >= 48) { alert('Maximum 48 participants.'); return; }
-    pool.participants = [...(pool.participants || []), { id: uid(), name, extraTeam: extraInput.checked }];
-    nameInput.value = ''; extraInput.checked = false;
-    await savePool(pool);
-    renderParticipantsListUI(pool);
-    refreshAdminAllocation(pool);
-  });
-
-  document.getElementById('new-participant-name').addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('add-participant-btn').click();
-  });
-}
-
-function renderParticipantsListUI(pool) {
+function renderParticipantsList(pool) {
   const container = document.getElementById('participants-list');
   if (!container) return;
-  container.innerHTML = '';
-  for (const p of (pool.participants || [])) {
-    const row = document.createElement('div');
-    row.className = 'participant-row';
-    row.dataset.id = p.id;
-    row.innerHTML = `
+  const extras = 12 % (pool.participant_count || 1) > 0;
+
+  container.innerHTML = (pool.participants || []).map(p => `
+    <div class="participant-row" data-id="${p.id}">
       <span class="p-name">${escHtml(p.name)}</span>
-      <span class="p-badge${p.extraTeam ? '' : ' hidden-badge'}">+extra</span>
-      <button class="edit-btn" data-id="${p.id}" title="Edit">✏️</button>
-      <button class="remove-btn" data-id="${p.id}" title="Remove">✕</button>
-    `;
-    container.appendChild(row);
-  }
+      ${extras ? `<span class="p-extra ${p.extraTeam ? '' : 'hidden-badge'}">+extra</span>` : ''}
+      <button class="btn-icon edit-p-btn" data-id="${p.id}" title="Edit">✏️</button>
+      <button class="btn-icon del-p-btn"  data-id="${p.id}" title="Remove">🗑</button>
+    </div>
+  `).join('');
 
-  container.querySelectorAll('.edit-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.id;
-      const p = (pool.participants || []).find(x => x.id === id);
-      if (!p) return;
-      const row = container.querySelector(`[data-id="${id}"]`);
-      row.innerHTML = `
-        <input class="edit-name-input" type="text" value="${escHtml(p.name)}" />
-        <label class="checkbox-label" style="white-space:nowrap">
-          <input class="edit-extra-check" type="checkbox" ${p.extraTeam ? 'checked' : ''} /> Extra team
-        </label>
-        <button class="edit-save-btn btn primary" data-id="${id}">Save</button>
-        <button class="edit-cancel-btn btn" data-id="${id}">Cancel</button>
-      `;
-      row.querySelector('.edit-name-input').focus();
-      row.querySelector('.edit-save-btn').addEventListener('click', async () => {
-        const newName = row.querySelector('.edit-name-input').value.trim();
-        if (!newName) return;
-        p.name = newName;
-        p.extraTeam = row.querySelector('.edit-extra-check').checked;
-        await savePool(pool);
-        renderParticipantsListUI(pool);
-        refreshAdminAllocation(pool);
-      });
-      row.querySelector('.edit-cancel-btn').addEventListener('click', () => renderParticipantsListUI(pool));
-      row.querySelector('.edit-name-input').addEventListener('keydown', e => {
-        if (e.key === 'Enter') row.querySelector('.edit-save-btn').click();
-        if (e.key === 'Escape') row.querySelector('.edit-cancel-btn').click();
-      });
-    });
+  container.querySelectorAll('.edit-p-btn').forEach(btn =>
+    btn.addEventListener('click', () => editParticipantInline(pool, btn.dataset.id)));
+  container.querySelectorAll('.del-p-btn').forEach(btn =>
+    btn.addEventListener('click', () => removeParticipant(pool, btn.dataset.id)));
+
+  const full = (pool.participants || []).length >= pool.participant_count;
+  const nameInput = document.getElementById('new-p-name');
+  const addBtn    = document.getElementById('add-p-btn');
+  if (nameInput) nameInput.disabled = full;
+  if (addBtn)    addBtn.disabled    = full;
+}
+
+function editParticipantInline(pool, id) {
+  const p   = (pool.participants || []).find(x => x.id === id);
+  const row = document.querySelector(`.participant-row[data-id="${id}"]`);
+  if (!p || !row) return;
+  const extras = 12 % (pool.participant_count || 1) > 0;
+  row.innerHTML = `
+    <input class="p-edit-name" type="text" value="${escHtml(p.name)}" style="flex:1;min-width:100px" />
+    ${extras ? `<label class="checkbox-row"><input class="p-edit-extra" type="checkbox" ${p.extraTeam ? 'checked' : ''} /> Extra</label>` : ''}
+    <button class="btn btn-sm btn-primary p-save-btn">Save</button>
+    <button class="btn btn-sm p-cancel-btn">Cancel</button>
+  `;
+  row.querySelector('.p-edit-name').focus();
+  row.querySelector('.p-save-btn').addEventListener('click', async () => {
+    const newName = row.querySelector('.p-edit-name').value.trim();
+    if (!newName) return;
+    p.name = newName;
+    p.extraTeam = row.querySelector('.p-edit-extra')?.checked || false;
+    try { await savePool(pool); } catch { showAdminError('Failed to save.'); }
+    renderParticipantsList(pool);
+    refreshAllocUI(pool);
   });
-
-  container.querySelectorAll('.remove-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.id;
-      pool.participants = (pool.participants || []).filter(p => p.id !== id);
-      if (pool.allocation) delete pool.allocation[id];
-      await savePool(pool);
-      renderParticipantsListUI(pool);
-      refreshAdminAllocation(pool);
-    });
+  row.querySelector('.p-cancel-btn').addEventListener('click', () => renderParticipantsList(pool));
+  row.querySelector('.p-edit-name').addEventListener('keydown', e => {
+    if (e.key === 'Enter')  row.querySelector('.p-save-btn').click();
+    if (e.key === 'Escape') row.querySelector('.p-cancel-btn').click();
   });
 }
 
-// ── Admin: elimination tracker ────────────────────────────────────
+async function removeParticipant(pool, id) {
+  pool.participants = (pool.participants || []).filter(p => p.id !== id);
+  if (pool.allocation) delete pool.allocation[id];
+  try {
+    await savePool(pool);
+    renderParticipantsList(pool);
+    updateParticipantCounter(pool);
+    refreshAllocUI(pool);
+  } catch { showAdminError('Failed to remove participant.'); }
+}
+
+function updateParticipantCounter(pool) {
+  const el = document.getElementById('p-counter');
+  if (!el) return;
+  const n = (pool.participants || []).length;
+  el.textContent = `${n} / ${pool.participant_count} participants added`;
+  el.className = `participant-counter ${n >= pool.participant_count ? 'full' : ''}`;
+}
+
+// ── Elimination tracker ────────────────────────────────────────────
 function renderEliminationTracker(pool) {
-  const body = document.getElementById('elimination-tracker-body');
+  const body = document.getElementById('elim-body');
   if (!body) return;
-  body.innerHTML = '';
-  const tierNames = {
+  const tierLabels = {
     1: '⭐ Tier 1 — Favoritos',
     2: '🔵 Tier 2 — Contendientes',
     3: '🟢 Tier 3 — Intermedios',
     4: '⚪ Tier 4 — Sorpresas',
   };
-  [1, 2, 3, 4].forEach(tier => {
+  body.innerHTML = '';
+  for (const tier of TIERS) {
     const group = document.createElement('div');
     group.className = 'elim-tier-group';
     const label = document.createElement('div');
     label.className = 'elim-tier-label';
-    label.textContent = tierNames[tier];
+    label.textContent = tierLabels[tier];
+    group.appendChild(label);
     const chips = document.createElement('div');
     chips.className = 'elim-chips';
     TEAMS.filter(t => t.tier === tier).forEach(team => {
-      const isElim = (pool.eliminated_teams || []).includes(team.name);
+      const id  = teamId(team);
+      const out = (pool.eliminated_teams || []).includes(id);
       const chip = document.createElement('button');
-      chip.className = 'elim-chip' + (isElim ? ' is-eliminated' : '');
-      chip.textContent = isElim ? `❌ ${team.name}` : team.name;
+      chip.className = `elim-chip${out ? ' is-elim' : ''}`;
+      chip.textContent = (out ? '❌ ' : '') + `${team.flag} ${team.name}`;
       chip.addEventListener('click', async () => {
         const elim = pool.eliminated_teams || [];
-        const idx = elim.indexOf(team.name);
-        pool.eliminated_teams = idx === -1
-          ? [...elim, team.name]
-          : elim.filter(n => n !== team.name);
-        await savePool(pool);
-        renderEliminationTracker(pool);
-        refreshAdminAllocation(pool);
+        const idx  = elim.indexOf(id);
+        pool.eliminated_teams = idx === -1 ? [...elim, id] : elim.filter(n => n !== id);
+        try { await savePool(pool); renderEliminationTracker(pool); refreshAllocUI(pool); }
+        catch { showAdminError('Failed to update.'); }
       });
       chips.appendChild(chip);
     });
-    group.appendChild(label);
     group.appendChild(chips);
     body.appendChild(group);
-  });
+  }
 }
 
-// ── Router ────────────────────────────────────────────────────────
-function router() {
-  const hash = window.location.hash || '#/';
+// ── Router ─────────────────────────────────────────────────────────
+async function router() {
+  const hash = window.location.hash;
   if (hash.includes('access_token') || hash.includes('error_description')) return;
 
-  const adminMatch = hash.match(/^#\/pool\/([^/]+)\/admin$/);
+  if (!hash || hash === '#' || hash === '#/') {
+    currentSession ? await renderDashboard() : renderLanding();
+    return;
+  }
+
+  const adminMatch  = hash.match(/^#\/pool\/([^/]+)\/admin$/);
   const viewerMatch = hash.match(/^#\/pool\/([^/]+)(?:\/)?$/);
 
-  if (adminMatch)       renderAdmin(adminMatch[1]);
-  else if (viewerMatch) renderViewer(viewerMatch[1]);
-  else                  session ? renderDashboard() : renderLanding();
+  if (adminMatch)       await renderAdmin(adminMatch[1]);
+  else if (viewerMatch) await renderViewer(viewerMatch[1]);
+  else                  currentSession ? await renderDashboard() : renderLanding();
 }
 
-// ── Init ─────────────────────────────────────────────────────────
+// ── Init ───────────────────────────────────────────────────────────
 async function init() {
-  const { data: { session: s } } = await db.auth.getSession();
-  session = s;
+  const { data: { session } } = await db.auth.getSession();
+  currentSession = session;
 
   db.auth.onAuthStateChange((event, newSession) => {
-    session = newSession;
-    if (event === 'SIGNED_IN' && window.location.hash.includes('access_token')) {
-      navigate('#/');
+    currentSession = newSession;
+    if (event === 'SIGNED_IN') {
+      const redirect = sessionStorage.getItem('wcpool_redirect');
+      sessionStorage.removeItem('wcpool_redirect');
+      navigate(redirect && redirect !== '#/' && !redirect.includes('access_token') ? redirect : '#/');
       return;
     }
+    if (event === 'SIGNED_OUT') { navigate('#/'); return; }
     router();
   });
 
