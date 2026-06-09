@@ -133,19 +133,61 @@ async function copyToClipboard(text, btn) {
 function teamId(team) { return `${team.flag} ${team.name}`; }
 
 // ── Allocation algorithm ───────────────────────────────────────────
+// Guarantees for N ≤ 12:
+//   - every player gets exactly floor(48/N) teams
+//   - (48 % N) players get one extra  →  max = ceil(48/N)
+//   - tier-balanced base: floor(12/N) teams per tier per player from tier pools
+//   - remaining teams shuffled into cross-tier extra rounds (no player gets +2)
+// For N > 12 each tier pool (12 teams) can't cover all players;
+// that case is not handled yet — pools should stay at ≤ 12 players.
 function allocate(participants) {
   if (!participants.length) return null;
   const N = participants.length;
+  const tierBase       = Math.floor(12 / N);       // per-tier base rounds
+  const globalBase     = Math.floor(48 / N);        // total guaranteed per player
+  const extras         = 48 % N;                    // players who get one extra
+  const extraBaseRounds = globalBase - 4 * tierBase; // full cross-tier rounds after tier base
+
   const result = {};
   for (const p of participants) result[p.id] = [];
 
-  for (const tier of TIERS) {
-    const pool = shuffle(TEAMS.filter(t => t.tier === tier));
-    const playerOrder = shuffle([...participants.map(p => p.id)]);
-    pool.forEach((team, i) => {
-      result[playerOrder[i % N]].push(team);
-    });
+  // Pre-shuffle each tier pool once
+  const tierPools = {};
+  for (let tier = 1; tier <= 4; tier++) {
+    tierPools[tier] = shuffle(TEAMS.filter(t => t.tier === tier));
   }
+
+  // Tier base rounds: give each player tierBase teams from every tier
+  const baseOrder = shuffle(participants.map(p => p.id));
+  for (let tier = 1; tier <= 4; tier++) {
+    const pool = tierPools[tier];
+    let idx = 0;
+    for (let round = 0; round < tierBase; round++) {
+      for (const pid of baseOrder) result[pid].push(pool[idx++]);
+    }
+  }
+
+  // Collect leftover teams (not used in tier base rounds) into one shuffled pool
+  const leftover = [];
+  for (let tier = 1; tier <= 4; tier++) {
+    for (let i = tierBase * N; i < 12; i++) leftover.push(tierPools[tier][i]);
+  }
+  shuffle(leftover); // leftover.length === extraBaseRounds*N + extras (exact)
+
+  let li = 0;
+
+  // Extra base rounds: give 1 leftover team to every player per round
+  const extraOrder = shuffle(participants.map(p => p.id));
+  for (let round = 0; round < extraBaseRounds; round++) {
+    for (const pid of extraOrder) result[pid].push(leftover[li++]);
+  }
+
+  // Final partial round: 1 more team each to exactly `extras` players
+  if (extras > 0) {
+    const extraIds = shuffle(participants.map(p => p.id)).slice(0, extras);
+    for (const pid of extraIds) result[pid].push(leftover[li++]);
+  }
+
   return result;
 }
 
