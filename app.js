@@ -1,3 +1,11 @@
+/*
+  SECURITY NOTE:
+  - SUPABASE_ANON_KEY is a public/publishable key — safe in client-side code.
+  - Admin password is stored only in localStorage, never sent to Supabase.
+  - RLS policies allow public read/write intentionally for a shared family pool.
+  - Do NOT use this pattern for sensitive or private data.
+*/
+
 // ── World Cup 2026 teams (48), tiered by expected strength ────
 // Tier 1: favoritos (12), Tier 2: contendientes (12),
 // Tier 3: intermedios (12), Tier 4: sorpresas (12)
@@ -56,12 +64,16 @@ const TEAMS = [
   { name: "🇨🇻 Cabo Verde",                    tier: 4 },
 ];
 
-const STORAGE_KEY = "wc2026_pool";
+// ── Supabase client ────────────────────────────────────────────
+const supabase = window.supabase.createClient(
+  window.SUPABASE_URL,
+  window.SUPABASE_ANON_KEY
+);
 
 // ── State ──────────────────────────────────────────────────────
 let state = {
   title: "World Cup 2026 Pool",
-  password: null,          // null until admin sets it — never committed to the repo
+  password: null,          // null until admin sets it — never sent to Supabase
   participants: [],        // [{ id, name, extraTeam }]
   allocation: null,        // { [id]: [teamName, ...] } | null
   allocationLocked: false,
@@ -71,30 +83,50 @@ let isAdmin = false;
 let pwWarningDismissed = false;
 
 // ── Persistence ────────────────────────────────────────────────
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+async function saveState() {
+  // password stays in localStorage only — never goes to Supabase
+  localStorage.setItem('wc2026_pool_password', state.password || '');
+  const { error } = await supabase
+    .from('pool_state')
+    .upsert({
+      id: 'singleton',
+      title: state.title,
+      participants: state.participants,
+      allocation: state.allocation,
+      allocation_locked: state.allocationLocked ?? false,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'id' });
+  if (error) console.error('Supabase saveState error:', error.message);
 }
 
-function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw) {
-    try { Object.assign(state, JSON.parse(raw)); } catch (_) {}
+async function loadState() {
+  // always load password from localStorage
+  state.password = localStorage.getItem('wc2026_pool_password') || null;
+  try {
+    const { data, error } = await supabase
+      .from('pool_state')
+      .select('*')
+      .eq('id', 'singleton')
+      .single();
+    if (error) throw error;
+    if (data) {
+      state.title            = data.title             ?? state.title;
+      state.participants     = data.participants       ?? [];
+      state.allocation       = data.allocation         ?? null;
+      state.allocationLocked = data.allocation_locked  ?? false;
+    }
+  } catch (err) {
+    console.warn('Supabase loadState failed, using defaults:', err.message);
   }
 }
 
 // ── Fair allocation algorithm ──────────────────────────────────
 function allocate(participants) {
   if (participants.length === 0) return null;
-  const n = participants.length;           // e.g. 10
+  const n = participants.length;
   const total = TEAMS.length;             // 48
   const base = Math.floor(total / n);     // 4
-  const extras = total % n;              // 8 → 8 people get 5 teams if n=10, wait…
-  // Actually 48 / 10 = 4 remainder 8, so 8 people get 5 and 2 get 4.
-  // But the user said "5 people get 5, 5 get 4" which requires 5*5+5*4=45≠48.
-  // 48 = 10*4 + 8, so 8 get 5 and 2 get 4 is the exact math.
-  // We honour the extraTeam flag first (those people get an extra team).
-  // If more extraTeam flags than available extras, we ignore the excess.
-  // If fewer, we fill from remaining participants randomly.
+  const extras = total % n;              // 8 → 8 people get 5, 2 get 4 (with n=10)
 
   // Determine who gets (base+1) teams
   const flagged = participants.filter(p => p.extraTeam).map(p => p.id);
@@ -103,7 +135,6 @@ function allocate(participants) {
   let bigGroup = [...flagged];
   let smallGroup = [...unflagged];
 
-  // Shuffle both groups
   shuffle(bigGroup);
   shuffle(smallGroup);
 
@@ -121,53 +152,26 @@ function allocate(participants) {
   for (const t of TEAMS) tierPools[t.tier].push(t.name);
   for (const pool of Object.values(tierPools)) shuffle(pool);
 
-  // Assign to participants using round-robin within each tier
-  // Each person should get roughly equal tier representation.
-  // Strategy: for each tier, distribute teams one-by-one across all participants
-  // in a shuffled order, giving big-group people one extra round.
-
   const allIds = participants.map(p => p.id);
   shuffle(allIds);
-
-  // Build a queue for each participant indicating how many teams they get
-  const teamCount = {};
-  for (const id of allIds) {
-    teamCount[id] = bigGroup.includes(id) ? base + 1 : base;
-  }
-
-  // We distribute per tier. Each tier has 12 teams.
-  // For a fair distribution, give each person teams proportional to their total share.
-  // Simple approach: fill person by person, ensuring tier balance.
 
   const result = {};
   for (const id of allIds) result[id] = [];
 
-  // Interleave tier pools: pick 1 from each tier per "round"
-  // Build a flat draw order cycling through tiers 1-2-3-4
+  // Build interleaved draw order cycling through tiers 1-2-3-4
   const drawOrder = [];
   const tierKeys = [1, 2, 3, 4];
-  // Each tier has 12 teams; we need 48 draws total
-  // We want to distribute evenly across tiers within each person's share
   const tierQueue = tierKeys.map(t => [...tierPools[t]]);
-  // Build interleaved list of all 48 teams
   for (let round = 0; round < 12; round++) {
     for (const t of tierKeys) {
       drawOrder.push({ name: tierQueue[t - 1][round], tier: t });
     }
   }
-  // drawOrder is now 48 teams in tier-interleaved order
-
-  // Assign teams round-by-round to participants
-  // Each participant gets slots = teamCount[id]
-  // We go through drawOrder sequentially, assigning to participants
-  // in a round-robin, but only up to their slot count.
 
   // Flatten participants in assignment order: interleave big & small groups
-  // so tier-1 teams are spread across both groups.
   const assignOrder = [];
   const bigQ = [...bigGroup];
   const smallQ = [...smallGroup];
-  // Interleave
   let bi = 0, si = 0;
   while (bi < bigQ.length || si < smallQ.length) {
     if (bi < bigQ.length) assignOrder.push(bigQ[bi++]);
@@ -175,12 +179,10 @@ function allocate(participants) {
   }
 
   let drawIdx = 0;
-  let round2 = 0;
-  // We distribute base rounds to everyone, then one more round to bigGroup
   const totalRounds = base + 1;
   for (let r = 0; r < totalRounds; r++) {
     for (const id of assignOrder) {
-      if (r === base && !bigGroup.includes(id)) continue; // small group stops at base
+      if (r === base && !bigGroup.includes(id)) continue;
       if (drawIdx >= drawOrder.length) break;
       result[id].push(drawOrder[drawIdx++]);
     }
@@ -248,12 +250,12 @@ function renderParticipantsList() {
       `;
       row.querySelector(".edit-name-input").focus();
 
-      row.querySelector(".edit-save-btn").addEventListener("click", () => {
+      row.querySelector(".edit-save-btn").addEventListener("click", async () => {
         const newName = row.querySelector(".edit-name-input").value.trim();
         if (!newName) return;
         p.name = newName;
         p.extraTeam = row.querySelector(".edit-extra-check").checked;
-        saveState();
+        await saveState();
         renderParticipantsList();
         renderAllocation();
       });
@@ -270,11 +272,11 @@ function renderParticipantsList() {
   });
 
   container.querySelectorAll(".remove-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       const id = btn.dataset.id;
       state.participants = state.participants.filter(p => p.id !== id);
       if (state.allocation) delete state.allocation[id];
-      saveState();
+      await saveState();
       renderParticipantsList();
       renderAllocation();
     });
@@ -348,7 +350,7 @@ function renderLockState() {
   badge.classList.toggle("hidden", !locked);
 }
 
-function renderAll() {
+function render() {
   renderPoolTitle();
   renderParticipantsList();
   renderAllocation();
@@ -384,17 +386,16 @@ function uid() {
   return Math.random().toString(36).slice(2, 9);
 }
 
-// ── Event wiring ───────────────────────────────────────────────
-function init() {
-  loadState();
-  renderAll();
+// ── App bootstrap (async IIFE) ─────────────────────────────────
+(async () => {
+  await loadState();
+  render();
 
   // Admin toggle
   document.getElementById("admin-toggle-btn").addEventListener("click", () => {
     if (isAdmin) {
       exitAdmin();
     } else if (!state.password) {
-      // No password set yet — first-time setup
       document.getElementById("admin-setup").classList.remove("hidden");
       document.getElementById("setup-password").value = "";
       document.getElementById("setup-password-confirm").value = "";
@@ -413,7 +414,7 @@ function init() {
     document.getElementById("admin-setup").classList.add("hidden");
   });
 
-  function trySetup() {
+  async function trySetup() {
     const pw = document.getElementById("setup-password").value;
     const pw2 = document.getElementById("setup-password-confirm").value;
     if (!pw || pw !== pw2) {
@@ -421,7 +422,7 @@ function init() {
       return;
     }
     state.password = pw;
-    saveState();
+    await saveState();
     document.getElementById("admin-setup").classList.add("hidden");
     enterAdmin();
     showPwWarning();
@@ -456,13 +457,12 @@ function init() {
     if (e.key === "Enter") tryLogin();
   });
 
-  // Close login modal on backdrop click
   document.getElementById("admin-login").addEventListener("click", e => {
     if (e.target === e.currentTarget) e.currentTarget.classList.add("hidden");
   });
 
   // Add participant
-  document.getElementById("add-participant-btn").addEventListener("click", () => {
+  document.getElementById("add-participant-btn").addEventListener("click", async () => {
     const nameInput = document.getElementById("new-participant-name");
     const extraInput = document.getElementById("new-participant-extra");
     const name = nameInput.value.trim();
@@ -474,7 +474,7 @@ function init() {
     state.participants.push({ id: uid(), name, extraTeam: extraInput.checked });
     nameInput.value = "";
     extraInput.checked = false;
-    saveState();
+    await saveState();
     renderParticipantsList();
   });
 
@@ -483,48 +483,48 @@ function init() {
   });
 
   // Allocate
-  document.getElementById("allocate-btn").addEventListener("click", () => {
+  document.getElementById("allocate-btn").addEventListener("click", async () => {
     if (state.allocationLocked) return;
     if (state.participants.length === 0) {
       document.getElementById("allocation-status").textContent = "Add participants first.";
       return;
     }
     state.allocation = allocate(state.participants);
-    saveState();
+    await saveState();
     renderAllocation();
     document.getElementById("allocation-status").textContent =
       `Allocated ${TEAMS.length} teams across ${state.participants.length} participants.`;
   });
 
   // Clear allocation
-  document.getElementById("clear-allocation-btn").addEventListener("click", () => {
+  document.getElementById("clear-allocation-btn").addEventListener("click", async () => {
     if (state.allocationLocked) return;
     if (!confirm("Clear the current allocation?")) return;
     state.allocation = null;
-    saveState();
+    await saveState();
     renderAllocation();
     document.getElementById("allocation-status").textContent = "Allocation cleared.";
   });
 
   // Lock / unlock allocation
-  document.getElementById("lock-allocation-btn").addEventListener("click", () => {
+  document.getElementById("lock-allocation-btn").addEventListener("click", async () => {
     if (state.allocationLocked) {
       if (!confirm("Are you sure you want to unlock the allocation? This will allow re-randomizing.")) return;
       state.allocationLocked = false;
     } else {
       state.allocationLocked = true;
     }
-    saveState();
+    await saveState();
     renderLockState();
   });
 
   // Save settings
-  document.getElementById("save-settings-btn").addEventListener("click", () => {
+  document.getElementById("save-settings-btn").addEventListener("click", async () => {
     const title = document.getElementById("pool-title-input").value.trim();
     const pw = document.getElementById("pool-password-input").value;
     if (title) state.title = title;
     if (pw) { state.password = pw; showPwWarning(); }
-    saveState();
+    await saveState();
     renderPoolTitle();
     document.getElementById("pool-password-input").value = "";
     alert("Settings saved.");
@@ -548,6 +548,21 @@ function init() {
       document.execCommand("copy");
     });
   });
-}
 
-document.addEventListener("DOMContentLoaded", init);
+  // Real-time subscription
+  supabase
+    .channel('pool_state_changes')
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'pool_state' },
+      (payload) => {
+        const d = payload.new;
+        state.title            = d.title;
+        state.participants     = d.participants;
+        state.allocation       = d.allocation;
+        state.allocationLocked = d.allocation_locked;
+        render();
+      }
+    )
+    .subscribe();
+})();
