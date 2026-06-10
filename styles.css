@@ -555,6 +555,7 @@ input[type="range"] {
 /* ── Participants section ─────────────────────────────────────── */
 .participant-counter { font-size: 0.82rem; color: var(--color-text-muted); }
 .participant-counter.full { color: var(--color-primary); }
+.participant-counter.over-limit { color: var(--color-danger, #e05050); font-weight: 600; }
 
 .participants-list { display: flex; flex-direction: column; gap: 6px; }
 .participant-row {

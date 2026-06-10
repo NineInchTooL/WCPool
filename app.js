@@ -170,6 +170,8 @@ function teamId(team) { return `${team.flag} ${team.name}`; }
 // that case is not handled yet — pools should stay at ≤ 12 players.
 function allocate(participants) {
   if (!participants.length) return null;
+  // Algorithm is only correct for N ≤ 12; clamp defensively (UI should prevent N > 12)
+  if (participants.length > 12) participants = participants.slice(0, 12);
   const N = participants.length;
   const tierBase       = Math.floor(12 / N);       // per-tier base rounds
   const globalBase     = Math.floor(48 / N);        // total guaranteed per player
@@ -443,7 +445,7 @@ async function renderDashboard() {
         </label>
         <label class="field">Participants
           <div class="modal-range-row">
-            <input type="range" id="new-count" min="2" max="48" value="10" />
+            <input type="range" id="new-count" min="2" max="12" value="10" />
             <span class="modal-range-val" id="new-count-val">10</span>
           </div>
           <span class="count-helper" id="count-helper">With 10 players, each gets 4–5 teams</span>
@@ -482,6 +484,7 @@ async function renderDashboard() {
   } catch {
     document.getElementById('dashboard-content').innerHTML =
       '<p class="error-msg">Failed to load pools. Please refresh.</p>';
+    document.getElementById('pool-count-badge').textContent = '—';
     return;
   }
 
@@ -521,7 +524,7 @@ function poolCardHTML(pool) {
 
   return `<div class="pool-card" data-id="${escHtml(pool.id)}">
     <div class="pool-card-title">${escHtml(pool.title)}</div>
-    <div class="pool-card-meta">${pool.participant_count} players</div>
+    <div class="pool-card-meta">${(pool.participants || []).length} / ${pool.participant_count} players</div>
     <div class="pool-card-badges">${badges}</div>
     <div class="pool-card-actions">
       <a href="#/pool/${pool.id}" class="btn btn-sm">👁 View</a>
@@ -739,7 +742,7 @@ function renderAdminPanel(pool) {
         <button class="change-link" id="change-count-btn">· change</button>
       </div>
       <div id="count-change-wrap" class="hidden row">
-        <input type="number" id="count-change-input" min="2" max="48" value="${pool.participant_count}" style="width:80px" />
+        <input type="number" id="count-change-input" min="2" max="12" value="${pool.participant_count}" style="width:80px" />
         <button class="btn btn-sm btn-primary" id="count-change-save">Save</button>
         <button class="btn btn-sm" id="count-change-cancel">Cancel</button>
         <span class="error-msg hidden" id="count-change-err"></span>
@@ -754,8 +757,10 @@ function renderAdminPanel(pool) {
     <!-- Participants -->
     <div class="card">
       <h3>Participants</h3>
-      <p class="participant-counter ${pCount >= pool.participant_count ? 'full' : ''}" id="p-counter">
-        ${pCount} / ${pool.participant_count} participants added
+      <p class="participant-counter ${pCount > pool.participant_count ? 'over-limit' : pCount >= pool.participant_count ? 'full' : ''}" id="p-counter">
+        ${pCount > pool.participant_count
+          ? `⚠️ ${pCount} / ${pool.participant_count} — please remove ${pCount - pool.participant_count} participant(s)`
+          : `${pCount} / ${pool.participant_count} participants added`}
       </p>
       <div class="participants-list" id="participants-list"></div>
       <div class="add-participant-form">
@@ -834,8 +839,8 @@ function bindAdminEvents(pool) {
   document.getElementById('count-change-save').addEventListener('click', async () => {
     const val  = +document.getElementById('count-change-input').value;
     const errEl = document.getElementById('count-change-err');
-    if (!val || val < 2 || val > 48) {
-      errEl.textContent = 'Must be 2–48.'; errEl.classList.remove('hidden'); return;
+    if (!val || val < 2 || val > 12) {
+      errEl.textContent = 'Must be 2–12.'; errEl.classList.remove('hidden'); return;
     }
     pool.participant_count = val;
     try { await savePool(pool); renderAdminPanel(pool); }
@@ -998,11 +1003,21 @@ function renderParticipantsList(pool) {
   container.querySelectorAll('.del-p-btn').forEach(btn =>
     btn.addEventListener('click', () => removeParticipant(pool, btn.dataset.id)));
 
-  const full = (pool.participants || []).length >= pool.participant_count;
+  const n = (pool.participants || []).length;
+  const full = n >= pool.participant_count;
   const nameInput = document.getElementById('new-p-name');
   const addBtn    = document.getElementById('add-p-btn');
   if (nameInput) nameInput.disabled = full;
   if (addBtn)    addBtn.disabled    = full;
+
+  const counterEl = document.getElementById('p-counter');
+  if (counterEl) {
+    const overLimit = n > pool.participant_count;
+    counterEl.textContent = overLimit
+      ? `⚠️ ${n} / ${pool.participant_count} — please remove ${n - pool.participant_count} participant(s)`
+      : `${n} / ${pool.participant_count} participants added`;
+    counterEl.className = `participant-counter ${overLimit ? 'over-limit' : (full ? 'full' : '')}`;
+  }
 }
 
 function editParticipantInline(pool, id) {
@@ -1048,8 +1063,11 @@ function updateParticipantCounter(pool) {
   const el = document.getElementById('p-counter');
   if (!el) return;
   const n = (pool.participants || []).length;
-  el.textContent = `${n} / ${pool.participant_count} participants added`;
-  el.className = `participant-counter ${n >= pool.participant_count ? 'full' : ''}`;
+  const overLimit = n > pool.participant_count;
+  el.textContent = overLimit
+    ? `⚠️ ${n} / ${pool.participant_count} — please remove ${n - pool.participant_count} participant(s)`
+    : `${n} / ${pool.participant_count} participants added`;
+  el.className = `participant-counter ${overLimit ? 'over-limit' : (n >= pool.participant_count ? 'full' : '')}`;
 }
 
 // ── Elimination tracker ────────────────────────────────────────────
