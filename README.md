@@ -1,21 +1,21 @@
 # WCPool — World Cup 2026 Pool Manager
 
 A lightweight single-page web app for managing informal World Cup betting
-pools among friends. Live at https://wc-pool-three.vercel.app
+pools among friends. Live at <https://wc-pool-three.vercel.app>
 
 ## Features
 
 - Google OAuth sign-in (no passwords stored)
-- Create up to 10 pools per account
+- Create up to 10 pools per account; share a public viewer link with no login required
 - Add 2–48 participants per pool
 - Automatic team allocation algorithm:
   - 48 FIFA World Cup 2026 teams split across 4 tiers
   - Tier-balanced distribution: every player gets teams from all 4 tiers
   - Guarantees `floor(48/N)` teams per player; `(48 % N)` players get one extra
   - Fully correct for all N in [2, 48]; N > 12 is noted in code comments
-- Real-time elimination tracker (updates across all open viewers instantly)
-- Viewer mode: shareable public link — no login required to view a pool
-- Admin mode: owner-only panel for managing participants, allocation, and eliminations
+- **Elimination Tracker** — admin marks eliminated teams; updates reflect instantly for all viewers
+- **Live Score Sync** — admin can pull finished group-stage results and get auto-suggested eliminations
+- Admin mode: owner-only panel for participants, allocation, eliminations, and export
 - WhatsApp export: copy formatted pool results to share in a chat
 - Dark / light theme toggle (persists via localStorage)
 - Mobile-responsive design
@@ -24,52 +24,56 @@ pools among friends. Live at https://wc-pool-three.vercel.app
 
 - **Frontend:** Vanilla JS, HTML, CSS (no framework, no build step)
 - **Backend/DB:** Supabase (PostgreSQL + Auth + Realtime)
-- **Hosting:** Vercel (static deployment)
+- **Edge Functions:** Supabase (score proxy — see below)
+- **Hosting:** Vercel (static deployment, auto-deploys from `main`)
 - **Auth:** Google OAuth via Supabase Auth
 
 ## Project Structure
 
-```
+```text
 /
-├── index.html       # App shell + Supabase config
-├── app.js           # All routing, views, and business logic (~900 lines)
-└── styles.css       # All styles, dark/light mode, mobile responsive
+├── index.html                          # App shell + Supabase config
+├── app.js                              # All routing, views, and business logic
+├── styles.css                          # All styles, dark/light mode, mobile responsive
+└── supabase/functions/wc-scores/       # Edge Function: score proxy
+    └── index.ts
 ```
 
-## Database Schema (Supabase)
+## Live Score Sync
 
-**Table: `pools`**
+Admins have a **"🔄 Sync Scores"** button inside the Elimination Tracker. When clicked:
 
-| Column | Type | Notes |
-|---|---|---|
-| id | text (PK) | 6-char nanoid |
-| owner_id | uuid (FK → auth.users) | Pool owner |
-| title | text | Pool display name |
-| participant_count | int | Target number of participants |
-| participants | jsonb | Array of `{ id, name, extraTeam }` |
-| allocation | jsonb | Map of `participantId → team[]` |
-| allocation_locked | bool | Prevents re-allocation when true |
-| eliminated_teams | jsonb | Array of eliminated team identifier strings |
-| team_set | text | Always `"WC2026"` for now |
-| created_at | timestamptz | Auto |
-| updated_at | timestamptz | Updated on save |
+1. The client calls the `wc-scores` Supabase Edge Function at `/functions/v1/wc-scores`
+2. The function tries **football-data.org** first (authenticated, server-side only)
+3. If football-data.org fails or returns no usable results, it falls back to **worldcup26.ir**
+4. Both sources are normalized into a shared `{ home, away, homeScore, awayScore, group }` format
+5. The UI suggests eliminations for teams with 0 points after all 3 group matches
+6. Suggestions are ephemeral — they are never saved automatically. The admin confirms each one by clicking it, which uses the same elimination chip flow as manual tracking
 
-**Table: `profiles`**
+## Edge Function & Secrets
 
-| Column | Type | Notes |
-|---|---|---|
-| id | uuid (PK, FK → auth.users) | |
-| display_name | text | From Google OAuth metadata |
-| avatar_url | text | From Google OAuth metadata |
+The `wc-scores` function requires one secret, set in the Supabase dashboard under **Settings → Edge Functions → Secrets**:
 
-## Row Level Security
+| Secret                  | Used by                   | Exposed to browser?   |
+| ----------------------- | ------------------------- | --------------------- |
+| `FOOTBALL_DATA_API_KEY` | `wc-scores` Edge Function | No — server-side only |
 
-- `pools`: Public SELECT (viewer mode); INSERT/UPDATE/DELETE restricted to `owner_id = auth.uid()`
-- `profiles`: Public SELECT; INSERT/UPDATE restricted to own row
+The client authenticates to the Edge Function using the public Supabase anon key (safe for client-side use).
 
-## Local Development
+## Deployment
 
-No build step required. Serve the root directory with any static file server:
+**Frontend** — push to `main`; Vercel deploys automatically.
+
+**Edge Functions** — must be deployed separately via the Supabase CLI:
+
+```bash
+supabase login
+supabase functions deploy wc-scores --project-ref <project-ref> --no-verify-jwt
+```
+
+After adding or changing secrets in the dashboard, redeploy the function for changes to take effect.
+
+**Local development** — no build step required:
 
 ```bash
 npx serve .
@@ -77,9 +81,38 @@ npx serve .
 python3 -m http.server 8080
 ```
 
-Then open http://localhost:8080. Note: Google OAuth `redirectTo` is hardcoded to
-the Vercel URL — for local dev you'll need to add `http://localhost:8080` as an
-allowed redirect URL in your Supabase project's Auth settings.
+Note: Google OAuth `redirectTo` is hardcoded to the Vercel URL. For local dev, add `http://localhost:8080` as an allowed redirect URL in your Supabase project's Auth settings.
+
+## Database Schema (Supabase)
+
+**Table: `pools`**
+
+| Column              | Type                   | Notes                                       |
+| ------------------- | ---------------------- | ------------------------------------------- |
+| id                  | text (PK)              | 6-char nanoid                               |
+| owner_id            | uuid (FK → auth.users) | Pool owner                                  |
+| title               | text                   | Pool display name                           |
+| participant_count   | int                    | Target number of participants               |
+| participants        | jsonb                  | Array of `{ id, name, extraTeam }`          |
+| allocation          | jsonb                  | Map of `participantId → team[]`             |
+| allocation_locked   | bool                   | Prevents re-allocation when true            |
+| eliminated_teams    | jsonb                  | Array of eliminated team identifier strings |
+| team_set            | text                   | Always `"WC2026"` for now                   |
+| created_at          | timestamptz            | Auto                                        |
+| updated_at          | timestamptz            | Updated on save                             |
+
+**Table: `profiles`**
+
+| Column        | Type                       | Notes                      |
+| ------------- | -------------------------- | -------------------------- |
+| id            | uuid (PK, FK → auth.users) |                            |
+| display_name  | text                       | From Google OAuth metadata |
+| avatar_url    | text                       | From Google OAuth metadata |
+
+## Row Level Security
+
+- `pools`: Public SELECT (viewer mode); INSERT/UPDATE/DELETE restricted to `owner_id = auth.uid()`
+- `profiles`: Public SELECT; INSERT/UPDATE restricted to own row
 
 ## Allocation Algorithm
 
@@ -94,6 +127,7 @@ See the `allocate()` function in `app.js`. Three phases:
 - The Supabase anon key in `index.html` is public/publishable by design — safe for client-side use
 - Pool IDs are 6-char nanoids (case-sensitive alphanumeric, ~56 billion combinations)
 - Realtime uses Supabase Postgres Changes on UPDATE events only
+- Live score suggestions are UI-only state; `eliminated_teams` in the database is the source of truth
 
 ## Author
 
