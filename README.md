@@ -22,6 +22,8 @@ progressive web app.
 - **PWA** — installable on Android (Chrome) and iOS (Safari → Share →
   Add to Home Screen)
 - **Dark / light mode** — follows system preference, manually toggleable
+- **i18n** — full UI in English (en-US), Spanish (es-MX), or Portuguese (pt-PT);
+  auto-detected from browser, manually switchable, persisted
 
 ---
 
@@ -36,6 +38,7 @@ progressive web app.
 | Edge Function  | Supabase Edge Function (`wc-scores`)            |
 | Hosting        | Vercel (static)                                 |
 | PWA            | Web App Manifest + Service Worker               |
+| i18n           | Custom `t()` system — en-US, es-MX, pt-PT       |
 
 ---
 
@@ -46,14 +49,15 @@ progressive web app.
 ├── index.html                        # Single-page app shell + PWA meta tags
 ├── app.js                            # All application logic (~1 file SPA)
 ├── styles.css                        # Design system + component styles
-├── manifest.json                     # PWA manifest
+├── manifest.json                     # PWA manifest (installable)
 ├── sw.js                             # Service worker (network-first, shell cache)
+├── favicon.svg                       # SVG logo mark (hex + W, teal)
 ├── icons/
 │   └── icon.svg                      # App icon (⚽ on teal, maskable)
 ├── supabase/
 │   └── functions/
 │       └── wc-scores/
-│           └── index.ts              # Edge Function: score proxy
+│           └── index.ts              # Edge Function: live score proxy
 └── README.md
 ```
 

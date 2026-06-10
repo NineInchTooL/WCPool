@@ -2,7 +2,7 @@
 
 > **Live app:** https://wc-pool-three.vercel.app
 > **Repository:** https://github.com/NineInchTooL/WCPool
-> **Built by:** NineInchTooL (Oscar Salazar) with Claude (Sonnet 4.6) in VS Code, June 8–9 2026
+> **Built by:** NineInchTooL (Oscar Salazar) with Claude (Sonnet 4.6) in VS Code, June 8–10 2026
 
 ---
 
@@ -56,13 +56,18 @@ The algorithm guarantees **every player gets exactly 1 Tier 1, 1 Tier 2, 1 Tier 
 
 ## 2. Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Vanilla HTML + CSS + JavaScript (no framework) |
-| Database | [Supabase](https://supabase.com) — PostgreSQL + real-time subscriptions |
-| Hosting | [Vercel](https://vercel.com) — auto-deploy from GitHub |
-| Source control | GitHub |
-| Development | VS Code + Claude (Sonnet 4.6) via Claude Code extension |
+| Layer          | Technology                                                  |
+|----------------|-------------------------------------------------------------|
+| Frontend       | Vanilla HTML + CSS + JavaScript (no framework)              |
+| Auth           | Supabase Auth (Google OAuth)                                |
+| Database       | [Supabase](https://supabase.com) — PostgreSQL               |
+| Realtime       | Supabase Realtime (postgres_changes)                        |
+| Edge Function  | Supabase Edge Function (`wc-scores`)                        |
+| Hosting        | [Vercel](https://vercel.com) — auto-deploy from GitHub      |
+| PWA            | Web App Manifest + Service Worker                           |
+| i18n           | Custom `t()` system — en-US, es-MX, pt-PT                   |
+| Source control | GitHub                                                      |
+| Development    | VS Code + Claude (Sonnet 4.6) via Claude Code extension     |
 
 ---
 
@@ -72,65 +77,120 @@ The algorithm guarantees **every player gets exactly 1 Tier 1, 1 Tier 2, 1 Tier 
 
 ```
 WCPool/
-├── index.html      — App shell, Supabase CDN, config variables, layout
-├── app.js          — All app logic: state, persistence, allocation, rendering
-├── styles.css      — All styles
-└── vercel.json     — Vercel routing config (serves index.html for all routes)
+├── index.html              — App shell, Supabase CDN, PWA meta tags
+├── app.js                  — All app logic: auth, routing, state,
+│                             allocation, i18n, rendering
+├── styles.css              — Design system + component styles
+├── manifest.json           — PWA manifest (installable)
+├── sw.js                   — Service worker (network-first, shell cache)
+├── favicon.svg             — SVG logo (⚽ on teal)
+├── icons/
+│   └── icon.svg            — Maskable PWA icon
+├── supabase/
+│   └── functions/
+│       └── wc-scores/
+│           └── index.ts    — Score proxy edge function
+└── vercel.json             — SPA routing (all → index.html)
 ```
 
 ### State Shape
 
+The app is a multi-pool SPA. Each pool is a row in the `pools` table.
+The pool object shape (from DB):
+
 ```js
-state = {
-  title: string,             // Pool name shown to all viewers
-  password: string|null,     // Admin password — localStorage ONLY, never Supabase
-  passwordSet: boolean,      // Mirrors Supabase password_set flag (no actual password)
-  participants: [            // Up to 10 participants
-    { id: string, name: string, extraTeam: boolean }
-  ],
-  allocation: {              // null until generated
-    [participantId]: [{ name: string, tier: number }]
-  } | null,
-  allocationLocked: boolean, // Prevents re-randomizing
-  eliminatedTeams: string[], // Array of eliminated team names
+{
+  id:                string,    // nanoid(6), client-generated
+  owner_id:          uuid,      // auth.users.id
+  title:             string,    // editable inline
+  participant_count: number,    // 2–12, configured at creation
+  participants:      [{ id, name, extraTeam }],
+  allocation:        { [participantId]: [{ name, tier }] } | null,
+  allocation_locked: boolean,
+  eliminated_teams:  string[],  // canonical Spanish team names
+  created_at:        timestamptz,
 }
 ```
 
-### Supabase Table: `pool_state`
+### Supabase Table: `pools`
 
-```sql
-id               TEXT PRIMARY KEY  -- always 'singleton' (one row)
-title            TEXT
-participants     JSONB
-allocation       JSONB
-allocation_locked BOOLEAN DEFAULT false
-password_set     BOOLEAN DEFAULT false
-eliminated_teams JSONB DEFAULT '[]'
-updated_at       TIMESTAMPTZ
-```
+| Column              | Type          | Notes                          |
+|---------------------|---------------|--------------------------------|
+| `id`                | `text` PK     | nanoid(6), client-generated    |
+| `owner_id`          | `uuid`        | references auth.users.id       |
+| `title`             | `text`        | editable pool name             |
+| `participant_count` | `int`         | 2–12                           |
+| `participants`      | `jsonb`       | `[{ id, name, extraTeam }]`    |
+| `allocation`        | `jsonb`       | `{ participantId: [...] }`     |
+| `allocation_locked` | `boolean`     | prevents re-randomizing        |
+| `eliminated_teams`  | `jsonb`       | `string[]` of Spanish names    |
+| `created_at`        | `timestamptz` | auto                           |
 
-Single-row design: the entire pool state is one upserted row with `id = 'singleton'`.
+### RLS Policies
 
-### Password Security Model
-
-- Admin password is stored **only in `localStorage`** on the admin's browser
-- Supabase stores only a boolean `password_set: true` — the actual password never leaves the device
-- Any device opening the app that sees `password_set = true` shows the login modal
-- Any device where `password_set = false` shows the first-time setup modal
-- ⚠️ Password is plain text in localStorage — do not reuse a real password
+- `SELECT` — public (anyone with pool ID can read)
+- `INSERT` — authenticated; `owner_id = auth.uid()`
+- `UPDATE` — authenticated; `owner_id = auth.uid()`
+- `DELETE` — authenticated; `owner_id = auth.uid()`
 
 ### Real-Time Sync
 
 ```js
-db.channel('pool_state_changes')
-  .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pool_state' },
-    (payload) => {
-      // Update local state from payload.new and re-render
-    })
+db.channel(`pool-${poolId}`)
+  .on('postgres_changes', {
+    event: 'UPDATE', schema: 'public', table: 'pools',
+    filter: `id=eq.${poolId}`
+  }, payload => {
+    // parse JSON fields (Realtime returns raw strings)
+    const updated = payload.new;
+    if (typeof updated.allocation === 'string')
+      updated.allocation = JSON.parse(updated.allocation);
+    if (typeof updated.eliminated_teams === 'string')
+      updated.eliminated_teams = JSON.parse(updated.eliminated_teams);
+    if (typeof updated.participants === 'string')
+      updated.participants = JSON.parse(updated.participants);
+    renderViewerContent(updated);
+  })
   .subscribe();
 ```
 
-When admin saves any change, all open viewer browsers update instantly.
+Each pool's viewer subscribes only to changes for that pool's row.
+JSON fields must be manually parsed — Realtime payloads return raw
+strings even for JSONB columns.
+
+### Routing
+
+Hash-based SPA router with 4 routes:
+
+| Hash                    | View        | Auth required       |
+|-------------------------|-------------|---------------------|
+| `#/`                    | Dashboard   | ✅ yes              |
+| `#/pool/:id`            | Viewer      | ❌ no               |
+| `#/pool/:id/admin`      | Admin panel | ✅ yes (owner only) |
+| (no hash / unmatched)   | Landing     | ❌ no               |
+
+`router()` is called on `hashchange` and on initial load.
+All navigation uses `location.hash = ...` — no server routing needed.
+
+### i18n System
+
+All user-facing strings pass through `t(key, ...args)`:
+
+```js
+function t(key, ...args) {
+  const val = TRANSLATIONS[currentLocale][key];
+  return typeof val === 'function' ? val(...args) : val ?? key;
+}
+```
+
+- `TRANSLATIONS` — object with `en-US`, `es-MX`, `pt-PT` keys,
+  each containing ~60 string or function entries
+- `TEAM_NAMES_I18N` — Spanish→locale display maps for all 48 teams
+- `localTeamName(nameEs)` — display-only translation; DB always stores
+  the canonical Spanish team name
+- Locale auto-detected from `navigator.language`, persisted to
+  `localStorage` as `wcpool_locale`
+- `setLocale(locale)` persists + calls `router()` to re-render
 
 ---
 
@@ -139,31 +199,62 @@ When admin saves any change, all open viewer browsers update instantly.
 ### Create the table
 
 ```sql
-CREATE TABLE pool_state (
-  id TEXT PRIMARY KEY,
-  title TEXT,
-  participants JSONB,
-  allocation JSONB,
-  allocation_locked BOOLEAN DEFAULT false,
-  password_set BOOLEAN DEFAULT false,
-  eliminated_teams JSONB DEFAULT '[]',
-  updated_at TIMESTAMPTZ
+create table pools (
+  id                text primary key,
+  owner_id          uuid references auth.users not null,
+  title             text,
+  participant_count int,
+  participants      jsonb default '[]',
+  allocation        jsonb,
+  allocation_locked boolean default false,
+  eliminated_teams  jsonb default '[]',
+  created_at        timestamptz default now()
 );
 ```
 
-### Column additions (added during development)
+### Enable RLS
 
 ```sql
--- Added when fixing Admin button bug
-ALTER TABLE pool_state ADD COLUMN IF NOT EXISTS password_set BOOLEAN DEFAULT false;
+alter table pools enable row level security;
 
--- Added when building elimination tracker
-ALTER TABLE pool_state ADD COLUMN IF NOT EXISTS eliminated_teams JSONB DEFAULT '[]';
+-- Public read (anyone with the pool ID can view)
+create policy "Public read" on pools
+  for select using (true);
+
+-- Owner insert
+create policy "Owner insert" on pools
+  for insert with check (auth.uid() = owner_id);
+
+-- Owner update
+create policy "Owner update" on pools
+  for update using (auth.uid() = owner_id);
+
+-- Owner delete
+create policy "Owner delete" on pools
+  for delete using (auth.uid() = owner_id);
 ```
 
-### RLS Policy
+### Enable Realtime
 
-RLS allows public read/write intentionally — this is a shared family pool with no sensitive data. Do not use this pattern for private data.
+In Supabase Dashboard → Database → Replication → enable `pools` table
+for INSERT and UPDATE events.
+
+### Auth setup
+
+In Supabase Dashboard → Authentication → Providers → enable Google.
+Add your Google OAuth Client ID and Secret.
+Add allowed redirect URLs:
+
+- `https://wc-pool-three.vercel.app`
+- `http://localhost:8080` (for local dev)
+
+### Edge Function secret
+
+In Supabase Dashboard → Settings → Edge Functions → Secrets:
+
+| Secret                  | Used by      |
+|-------------------------|--------------|
+| `FOOTBALL_DATA_API_KEY` | `wc-scores`  |
 
 ---
 
@@ -183,6 +274,16 @@ RLS allows public read/write intentionally — this is a shared family pool with
 | 10 | [a64e8d6](https://github.com/NineInchTooL/WCPool/commit/a64e8d62f8557ebf16d1f00289a893cf880f3b38) | 2026-06-09 | Add prominent pool title hero and NineInchTooL branding |
 | 11 | [3cbff91](https://github.com/NineInchTooL/WCPool/commit/3cbff91d4b7dd545383b20c00c53fa16773721a1) | 2026-06-09 | Add team elimination tracker |
 | 12 | [b085d9c](https://github.com/NineInchTooL/WCPool/commit/b085d9c2ac67dcacfdfb5977232c113fcd6da431) | 2026-06-09 | Fix allocation algorithm to guarantee balanced tier distribution |
+| 13 | [24b05fd](https://github.com/NineInchTooL/WCPool/commit/24b05fd) | 2026-06-09 | Rewrite app with Supabase Auth, multi-pool dashboard, and hash routing |
+| 14 | [f081554](https://github.com/NineInchTooL/WCPool/commit/f081554) | 2026-06-09 | feat: v2 multi-pool architecture with Supabase Auth + hash routing |
+| 15 | [82b67b1](https://github.com/NineInchTooL/WCPool/commit/82b67b1) | 2026-06-09 | feat: live score sync via football-data.org with worldcup26.ir fallback |
+| 16 | [0cbf103](https://github.com/NineInchTooL/WCPool/commit/0cbf103) | 2026-06-09 | feat: PWA manifest + service worker + app icon |
+| 17 | [91a86f0](https://github.com/NineInchTooL/WCPool/commit/91a86f0) | 2026-06-09 | design: visual uplift — Syne/Inter fonts, SVG logo, premium surfaces |
+| 18 | [6baac35](https://github.com/NineInchTooL/WCPool/commit/6baac35) | 2026-06-09 | fix: apple-touch-icon points to favicon.svg |
+| 19 | [e292203](https://github.com/NineInchTooL/WCPool/commit/e292203) | 2026-06-09 | docs: full project README — schema, stack, PWA, deployment |
+| 20 | [adb27dd](https://github.com/NineInchTooL/WCPool/commit/adb27dd) | 2026-06-09 | docs: add thorough DEVELOPMENT.md with full build history |
+| 21 | [3048c2f](https://github.com/NineInchTooL/WCPool/commit/3048c2f) | 2026-06-09 | polish: mobile nav, realtime json parse, elim chip debounce, alloc card status |
+| 22 | [abf0773](https://github.com/NineInchTooL/WCPool/commit/abf0773) | 2026-06-10 | feat: full i18n — en-US, es-MX, pt-PT with locale switcher |
 
 ---
 
@@ -566,6 +667,138 @@ Commit and push to GitHub after fixing.
 
 ---
 
+---
+
+### Feature 11 — Full Architecture Migration (Multi-Pool + Auth)
+
+**What:** Rewrote the entire app from a single shared pool with
+localStorage persistence to a multi-pool SPA with Google OAuth auth,
+each pool as its own Supabase row, and hash-based client-side routing.
+
+**Key changes:**
+
+- Replaced localStorage state with a `pools` table (one row per pool)
+- Added Google OAuth via Supabase Auth — dashboard requires sign-in
+- Viewer mode remains public (no auth required)
+- Admin panel restricted to pool owner (`owner_id = auth.uid()`)
+- Hash router: `#/` dashboard, `#/pool/:id` viewer, `#/pool/:id/admin` admin
+- Pool creation modal: title + participant count slider (2–12)
+- Up to 10 pools per user
+- Pool cards: View, Admin, Delete buttons
+- Realtime subscription scoped to single pool (`filter: id=eq.${poolId}`)
+
+---
+
+### Feature 12 — Live Score Sync (Edge Function)
+
+**What:** Admin can sync live World Cup scores to get suggested team
+eliminations based on group stage standings.
+
+**How it works:**
+
+1. Admin clicks "🔄 Sync Scores" in the Elimination Tracker
+2. App calls the `wc-scores` Supabase Edge Function
+3. Edge Function queries football-data.org (primary) or worldcup26.ir (fallback)
+4. Returns finished group-stage matches as JSON
+5. App builds group standings; teams with 0 points after 3 games
+   surface as clickable suggested elimination chips
+6. Suggestions are **never auto-applied** — admin clicks each chip to confirm
+
+**Files:** `supabase/functions/wc-scores/index.ts`
+
+**Required secret:** `FOOTBALL_DATA_API_KEY` in Supabase Edge Function secrets
+
+---
+
+### Feature 13 — PWA (Progressive Web App)
+
+**What:** Made WCPool installable as a native-like app on iOS and Android.
+
+**Changes:**
+
+- `manifest.json` — name, icons, theme color (`#01696f`), display standalone
+- `sw.js` — network-first service worker; caches shell files
+  (`/`, `app.js`, `styles.css`, `manifest.json`, `favicon.svg`)
+- `icons/icon.svg` — ⚽ on teal maskable icon
+- `index.html` — `<link rel="manifest">`, `apple-mobile-web-app-*` meta tags,
+  service worker registration
+
+**Install instructions:**
+
+- Android: Chrome shows "Add to Home Screen" banner automatically
+- iOS: Safari → Share → "Add to Home Screen" → Add
+
+---
+
+### Feature 14 — Visual Design Uplift
+
+**What:** Replaced the flat default browser styles with a polished
+design system: Syne (display) + Inter (body), teal accent palette,
+surface layering, SVG logo, dark/light mode toggle.
+
+**Key design tokens:**
+
+- `--color-primary: #01696f` (Hydra Teal)
+- `--font-display: 'Syne'` / `--font-body: 'Inter'`
+- 4px spacing system, fluid `clamp()` type scale
+- Warm beige surfaces (light) / deep charcoal (dark)
+- SVG inline logo in all four headers
+
+---
+
+### Feature 15 — Polish Pass
+
+**What:** 7 targeted UX and defensive-coding improvements.
+
+**Changes made:**
+
+1. `countHelper` text updates on modal open (not just slider drag)
+2. Allocation card shows `— equipos` guard when `teams.length === 0`
+3. Verified `copy-wa-btn` ID match in `refreshAllocUI`
+4. Realtime `onUpdate` now parses JSON string fields before render
+   (Supabase Realtime returns raw strings for JSONB columns)
+5. Mobile nav: "← My Pools" collapses to "←" on screens ≤ 480px;
+   `.header-center` byline hidden on mobile
+6. Elimination chip click debounced with `saving` lock to prevent
+   concurrent `savePool()` calls
+7. `.alloc-status` omits "❌ 0 eliminados" when `out === 0`
+
+---
+
+### Feature 16 — Full i18n
+
+**What:** Complete internationalization supporting US English (en-US),
+Mexican Spanish (es-MX), and Portuguese from Portugal (pt-PT).
+
+**System design:**
+
+- `TRANSLATIONS` object — ~60 keys per locale, string or function values
+  (functions handle plurals and interpolated strings)
+- `t(key, ...args)` — resolves and calls string/function, falls back to en-US
+- `TEAM_NAMES_I18N` — Spanish→English and Spanish→Portuguese display maps
+  for all 48 teams; canonical DB storage stays Spanish
+- `localTeamName(nameEs)` — display-only translation layer
+- `currentLocale` — auto-detected from `navigator.language`, persisted
+  to `localStorage` as `wcpool_locale`
+- `setLocale(locale)` — persists + re-renders via `router()`
+- `localeSwitcherHTML()` / `bindLocaleSwitcher()` — pill buttons rendered
+  in all 4 page headers (landing, dashboard, viewer, admin)
+
+**i18n rule for future features:**
+
+> Every new user-facing string must be added to all three locale objects
+> in `TRANSLATIONS` before use. Call `t('key')` — never hardcode UI strings.
+> Team names displayed to users must go through `localTeamName()`.
+> DB writes always use the canonical Spanish name.
+
+**styles.css additions:**
+
+- `.locale-switcher` — flex row of pill buttons in header
+- `.locale-btn` — compact, muted by default
+- `.locale-btn.active` — teal highlight for current locale
+
+---
+
 ## 7. Bugs Encountered & Fixes
 
 ### Bug 1 — Admin Button Did Nothing (all devices)
@@ -606,15 +839,29 @@ Uncaught SyntaxError: redeclaration of non-configurable global property supabase
 
 ---
 
+### Bug 4 — Realtime JSON Fields Not Parsed
+
+**Symptom:** Viewer didn't update correctly on real-time events —
+allocation cards showed raw JSON strings instead of rendered teams.
+
+**Cause:** Supabase REST responses auto-parse JSONB columns, but
+Realtime `payload.new` returns them as raw JSON strings.
+
+**Fix:** Added explicit `JSON.parse()` guards in the `onUpdate`
+callback before passing the pool object to `renderViewerContent`.
+
+---
+
 ## 8. Security Notes
 
-| Aspect | Detail |
-|--------|--------|
-| Admin password | Stored plain text in `localStorage` — do NOT reuse a real password |
-| Supabase | `password_set: true` flag only — actual password never sent |
-| Anon key | Supabase anon key is public/publishable — safe in client code |
-| RLS | Intentionally open read/write — this is a public shared pool |
-| Recommendation | Use a throwaway password like `mundial2026` for this app |
+| Aspect            | Detail                                                                   |
+|-------------------|--------------------------------------------------------------------------|
+| Authentication    | Google OAuth via Supabase Auth — no passwords in the app                 |
+| Pool ownership    | All writes gated by `owner_id = auth.uid()` RLS policy                   |
+| Viewer access     | Public by design — anyone with the pool ID URL can view                  |
+| Supabase anon key | Public/publishable — safe to commit, only allows RLS-scoped ops          |
+| Edge Function key | `FOOTBALL_DATA_API_KEY` stored as Supabase secret, never in code         |
+| Locale storage    | `wcpool_locale` in localStorage — non-sensitive preference               |
 
 ---
 
@@ -651,8 +898,14 @@ The `wc-pool-m0j75qlxo-...` style URLs are deployment-specific and change each d
 
 ## 10. Future Ideas
 
-- **"Who are you?" selector** — viewer picks their name on load and only sees their own allocation card
-- **Score tracker** — admin enters match results, app calculates points per participant based on how far their teams advance
-- **Leaderboard** — ranked view of participants by points
-- **Push notifications** — notify participants when their team is eliminated
-- **Match schedule** — show upcoming matches for each participant's teams
+- **Prompt 6 — Magic Link invite** — pool owner shares a link;
+  participant clicks it and claims their allocation card without
+  needing a Google account
+- **Prompt 7 — PWA polish + offline shell** — proper caching strategy,
+  "Install App" prompt for mobile users
+- **Prompt 8 — Live standings / leaderboard** — participants ranked by
+  teams still alive, auto-computed from `eliminated_teams`
+- **Prompt 9 — Push notifications** — notify participants when a team
+  is eliminated; shareable "❌ [Team] is out!" WhatsApp card
+- **Prompt 10 — Multi-tournament** — Copa América, Euros, custom
+  team lists and tier configurations
