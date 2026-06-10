@@ -103,6 +103,7 @@ const db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANO
 let currentSession = null;
 let realtimeChannel = null;
 let currentSuggestions = [];
+let elimSyncIntervalId = null;
 
 // ── Theme ──────────────────────────────────────────────────────────
 (function initTheme() {
@@ -323,6 +324,7 @@ async function deletePool(id) {
 // ── Realtime ───────────────────────────────────────────────────────
 function cleanupRealtime() {
   if (realtimeChannel) { db.removeChannel(realtimeChannel); realtimeChannel = null; }
+  if (elimSyncIntervalId) { clearInterval(elimSyncIntervalId); elimSyncIntervalId = null; }
 }
 
 function subscribeToPool(poolId, onUpdate) {
@@ -1185,6 +1187,17 @@ function renderEliminationTracker(pool) {
       syncBtn.disabled = false;
     }
   });
+
+  // Auto-sync on mount
+  syncBtn.click();
+
+  // Poll every 5 minutes while tab is visible; clear any previous interval first
+  if (elimSyncIntervalId) clearInterval(elimSyncIntervalId);
+  elimSyncIntervalId = setInterval(() => {
+    if (!document.hidden) syncBtn.click();
+  }, 5 * 60 * 1000);
+
+  window.addEventListener('hashchange', () => clearInterval(elimSyncIntervalId), { once: true });
 }
 
 function showElimSyncError(container) {
