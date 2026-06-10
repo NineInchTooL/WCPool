@@ -18,6 +18,8 @@
   --tier-2:             #3b82f6;
   --tier-3:             #22c55e;
   --tier-4:             #9ca3af;
+  --color-warning:      #f59e0b;
+  --color-warning-bg:   rgba(245, 158, 11, 0.12);
   --radius-sm:          5px;
   --radius:             10px;
   --radius-lg:          14px;
@@ -44,6 +46,8 @@
   --color-text:       #1c1917;
   --color-text-muted: #78716c;
   --color-text-faint: #a8a29e;
+  --color-warning:    #b45309;
+  --color-warning-bg: rgba(180, 83, 9, 0.09);
   --shadow-sm:        0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
   --shadow-md:        0 4px 12px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
   --shadow-card:      0 0 0 1px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.07);
@@ -907,6 +911,41 @@ details.elim-card[open] > summary {
   border-color: var(--color-border);
   box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
+}
+
+/* ── Elimination banner ──────────────────────────────────────── */
+.elimination-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+  transition: opacity 0.3s ease;
+}
+.elimination-banner--dismissed {
+  opacity: 0;
+  pointer-events: none;
+}
+.elimination-banner__message {
+  flex: 1;
+  min-width: 0;
+}
+.elimination-banner__dismiss {
+  flex-shrink: 0;
+  color: var(--color-warning);
+  opacity: 0.7;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  line-height: 0;
+}
+.elimination-banner__dismiss:hover {
+  opacity: 1;
+  background: rgba(245, 158, 11, 0.12);
 }
 
 /* ── Responsive ──────────────────────────────────────────────── */

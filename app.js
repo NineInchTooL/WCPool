@@ -147,6 +147,7 @@ let currentSession = null;
 let realtimeChannel = null;
 let currentSuggestions = [];
 let elimSyncIntervalId = null;
+const dismissedEliminationNotices = new Map(); // poolId → Set<teamName>
 
 // ── i18n ───────────────────────────────────────────────────────────
 // Rules: TEAMS[].name is always Spanish (es-MX) — canonical DB key.
@@ -265,6 +266,9 @@ const TRANSLATIONS = {
     // Share
     share_copy:                '🔗 Share',
     share_copied:              '✅ Link copied!',
+    // Elimination banner
+    elimination_banner:        '⚠️ {teams} were eliminated from your pool',
+    elimination_banner_dismiss: 'Dismiss',
     // Saved pools
     pool_save:                 '📌 Save',
     pool_saved:                '✅ Saved',
@@ -370,6 +374,9 @@ const TRANSLATIONS = {
     // Share
     share_copy:                '🔗 Compartir',
     share_copied:              '✅ ¡Link copiado!',
+    // Elimination banner
+    elimination_banner:        '⚠️ {teams} fueron eliminados de tu quiniela',
+    elimination_banner_dismiss: 'Cerrar',
     // Saved pools
     pool_save:                 '📌 Guardar',
     pool_saved:                '✅ Guardada',
@@ -475,6 +482,9 @@ const TRANSLATIONS = {
     // Share
     share_copy:                '🔗 Compartilhar',
     share_copied:              '✅ Link copiado!',
+    // Elimination banner
+    elimination_banner:        '⚠️ {teams} foram eliminados do seu bolão',
+    elimination_banner_dismiss: 'Fechar',
     // Saved pools
     pool_save:                 '📌 Guardar',
     pool_saved:                '✅ Guardada',
@@ -1154,6 +1164,41 @@ function bindDashboardModals(pools, savedEntries = []) {
       errEl2.classList.remove('hidden');
     }
   };
+}
+
+// ── Elimination banner (saved-pool viewers only) ───────────────────
+const CLOSE_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
+function checkEliminationsOnLoad(pool) {
+  const eliminated  = pool.eliminated_teams || [];
+  const dismissed   = dismissedEliminationNotices.get(pool.id) || new Set();
+  const undismissed = eliminated.filter(name => !dismissed.has(name));
+  if (undismissed.length) showEliminationBanner(pool.id, undismissed);
+}
+
+function showEliminationBanner(poolId, teams) {
+  const existing = document.getElementById('elimination-banner');
+  if (existing) existing.remove();
+
+  const msg    = t('elimination_banner').replace('{teams}', teams.join(', '));
+  const banner = document.createElement('div');
+  banner.id        = 'elimination-banner';
+  banner.className = 'elimination-banner';
+  banner.setAttribute('role', 'alert');
+  banner.innerHTML = `
+    <span class="elimination-banner__message">${escHtml(msg)}</span>
+    <button class="elimination-banner__dismiss btn-icon" aria-label="${escHtml(t('elimination_banner_dismiss'))}">${CLOSE_ICON}</button>`;
+
+  banner.querySelector('.elimination-banner__dismiss').addEventListener('click', () => {
+    const dismissed = dismissedEliminationNotices.get(poolId) || new Set();
+    teams.forEach(name => dismissed.add(name));
+    dismissedEliminationNotices.set(poolId, dismissed);
+    banner.classList.add('elimination-banner--dismissed');
+    setTimeout(() => banner.remove(), 300);
+  });
+
+  const viewerHeader = document.querySelector('.viewer-header');
+  if (viewerHeader) viewerHeader.insertAdjacentElement('afterend', banner);
 }
 
 // ── Viewer mode ────────────────────────────────────────────────────
