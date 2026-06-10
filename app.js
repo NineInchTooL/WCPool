@@ -69,12 +69,40 @@ const TEAM_SETS = {
   WC2026: { label: 'FIFA World Cup 2026', teams: TEAMS },
 };
 
+// Maps English API names (football-data.org / worldcup26.ir) → local Spanish names
+const EN_TO_LOCAL = {
+  'Argentina': 'Argentina', 'France': 'Francia', 'England': 'Inglaterra',
+  'Brazil': 'Brasil', 'Spain': 'España', 'Germany': 'Alemania',
+  'Portugal': 'Portugal', 'Netherlands': 'Países Bajos', 'Netherlands NT': 'Países Bajos',
+  'Belgium': 'Bélgica', 'Uruguay': 'Uruguay', 'Colombia': 'Colombia',
+  'United States': 'Estados Unidos', 'USA': 'Estados Unidos',
+  'Mexico': 'México', 'Croatia': 'Croacia', 'Switzerland': 'Suiza',
+  'Senegal': 'Senegal', 'Japan': 'Japón', 'Morocco': 'Marruecos',
+  'South Korea': 'Corea del Sur', 'Korea Republic': 'Corea del Sur', 'Republic of Korea': 'Corea del Sur',
+  'Ecuador': 'Ecuador', 'Austria': 'Austria', 'Turkey': 'Turquía', 'Türkiye': 'Turquía',
+  'Canada': 'Canadá', 'Sweden': 'Suecia', 'Australia': 'Australia', 'Norway': 'Noruega',
+  'Paraguay': 'Paraguay', 'Tunisia': 'Túnez',
+  'Bosnia and Herzegovina': 'Bosnia y Herzegovina', 'Bosnia & Herzegovina': 'Bosnia y Herzegovina',
+  'Ghana': 'Ghana', 'Czech Republic': 'República Checa', 'Czechia': 'República Checa',
+  'Scotland': 'Escocia', "Ivory Coast": 'Costa de Marfil',
+  "Côte d'Ivoire": 'Costa de Marfil', "Cote d'Ivoire": 'Costa de Marfil',
+  'Algeria': 'Argelia', 'Iran': 'Irán', 'Islamic Republic of Iran': 'Irán', 'Egypt': 'Egipto',
+  'Saudi Arabia': 'Arabia Saudita', 'South Africa': 'Sudáfrica', 'Iraq': 'Irak',
+  'Jordan': 'Jordania', 'Qatar': 'Catar', 'Uzbekistan': 'Uzbekistán',
+  'Curaçao': 'Curazao', 'Curacao': 'Curazao', 'Haiti': 'Haití', 'Panama': 'Panamá',
+  'New Zealand': 'Nueva Zelanda', 'DR Congo': 'Rep. Democrática del Congo',
+  'Congo DR': 'Rep. Democrática del Congo',
+  'Democratic Republic of the Congo': 'Rep. Democrática del Congo',
+  'Cape Verde': 'Cabo Verde',
+};
+
 // ── Supabase (use `db` — window.supabase is non-configurable) ──────
 const db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
 // ── State ──────────────────────────────────────────────────────────
 let currentSession = null;
 let realtimeChannel = null;
+let currentSuggestions = [];
 
 // ── Theme ──────────────────────────────────────────────────────────
 (function initTheme() {
@@ -234,6 +262,42 @@ async function savePool(pool) {
   const { error } = await db.from('pools')
     .upsert({ ...pool, updated_at: new Date().toISOString() }, { onConflict: 'id' });
   if (error) throw error;
+}
+
+async function fetchLiveScores() {
+  const url = `${window.SUPABASE_URL}/functions/v1/wc-scores`;
+  const res = await fetch(url, { headers: { apikey: window.SUPABASE_ANON_KEY } });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+function computeSuggestions(matches) {
+  const standings = {};
+  for (const m of matches) {
+    const g = m.group || 'Unknown';
+    if (!standings[g]) standings[g] = {};
+    for (const name of [m.home, m.away]) {
+      if (!standings[g][name]) standings[g][name] = { pts: 0, played: 0 };
+    }
+    standings[g][m.home].played++;
+    standings[g][m.away].played++;
+    if (m.homeScore > m.awayScore)      { standings[g][m.home].pts += 3; }
+    else if (m.homeScore < m.awayScore) { standings[g][m.away].pts += 3; }
+    else                                { standings[g][m.home].pts += 1; standings[g][m.away].pts += 1; }
+  }
+  const suggested = [];
+  for (const group of Object.values(standings)) {
+    for (const [name, rec] of Object.entries(group)) {
+      if (rec.pts === 0 && rec.played === 3) {
+        const localName = EN_TO_LOCAL[name];
+        if (localName) {
+          const team = TEAMS.find(t => t.name === localName);
+          if (team) suggested.push(team);
+        }
+      }
+    }
+  }
+  return suggested;
 }
 
 async function createPool(title, participantCount) {
@@ -992,13 +1056,64 @@ function updateParticipantCounter(pool) {
 function renderEliminationTracker(pool) {
   const body = document.getElementById('elim-body');
   if (!body) return;
+
   const tierLabels = {
     1: '⭐ Tier 1 — Favoritos',
     2: '🔵 Tier 2 — Contendientes',
     3: '🟢 Tier 3 — Intermedios',
     4: '⚪ Tier 4 — Sorpresas',
   };
+
   body.innerHTML = '';
+
+  // Header row with Sync Scores button
+  const header = document.createElement('div');
+  header.className = 'elim-header';
+  const syncBtn = document.createElement('button');
+  syncBtn.id = 'elim-sync-btn';
+  syncBtn.className = 'btn btn-sm elim-sync-btn';
+  syncBtn.textContent = '🔄 Sync Scores';
+  header.appendChild(syncBtn);
+  body.appendChild(header);
+
+  // Suggestion banner (purely UI state, never persisted)
+  const nonElim = currentSuggestions.filter(t => !(pool.eliminated_teams || []).includes(teamId(t)));
+  if (nonElim.length > 0) {
+    const banner = document.createElement('div');
+    banner.className = 'elim-suggestions';
+    const label = document.createElement('span');
+    label.className = 'sugg-label';
+    label.textContent = '📊 Suggested eliminations based on live scores:';
+    banner.appendChild(label);
+    nonElim.forEach(t => {
+      const tid = teamId(t);
+      const chip = document.createElement('span');
+      chip.className = 'sugg-chip';
+      const name = document.createElement('button');
+      name.className = 'sugg-name';
+      name.textContent = `${t.flag} ${t.name}`;
+      name.addEventListener('click', () => {
+        currentSuggestions = currentSuggestions.filter(s => teamId(s) !== tid);
+        const target = body.querySelector(`button.elim-chip[data-team-id="${CSS.escape(tid)}"]`);
+        if (target && !(pool.eliminated_teams || []).includes(tid)) target.click();
+        else renderEliminationTracker(pool);
+      });
+      const dismiss = document.createElement('button');
+      dismiss.className = 'sugg-dismiss';
+      dismiss.setAttribute('aria-label', 'Dismiss');
+      dismiss.textContent = '×';
+      dismiss.addEventListener('click', () => {
+        currentSuggestions = currentSuggestions.filter(s => teamId(s) !== tid);
+        renderEliminationTracker(pool);
+      });
+      chip.appendChild(name);
+      chip.appendChild(dismiss);
+      banner.appendChild(chip);
+    });
+    body.appendChild(banner);
+  }
+
+  // Tier chip groups
   for (const tier of TIERS) {
     const group = document.createElement('div');
     group.className = 'elim-tier-group';
@@ -1013,6 +1128,7 @@ function renderEliminationTracker(pool) {
       const out = (pool.eliminated_teams || []).includes(id);
       const chip = document.createElement('button');
       chip.className = `elim-chip${out ? ' is-elim' : ''}`;
+      chip.dataset.teamId = id;
       chip.textContent = (out ? '❌ ' : '') + `${team.flag} ${team.name}`;
       let saving = false;
       chip.addEventListener('click', async () => {
@@ -1030,6 +1146,35 @@ function renderEliminationTracker(pool) {
     group.appendChild(chips);
     body.appendChild(group);
   }
+
+  // Sync button handler
+  syncBtn.addEventListener('click', async () => {
+    syncBtn.textContent = 'Syncing…';
+    syncBtn.disabled = true;
+    try {
+      const matches = await fetchLiveScores();
+      if (!matches.length) {
+        showElimSyncError(header);
+        syncBtn.textContent = '🔄 Sync Scores';
+        syncBtn.disabled = false;
+        return;
+      }
+      currentSuggestions = computeSuggestions(matches);
+      renderEliminationTracker(pool);
+    } catch {
+      showElimSyncError(header);
+      syncBtn.textContent = '🔄 Sync Scores';
+      syncBtn.disabled = false;
+    }
+  });
+}
+
+function showElimSyncError(container) {
+  const err = document.createElement('span');
+  err.className = 'elim-sync-error';
+  err.textContent = 'Could not fetch scores';
+  container.appendChild(err);
+  setTimeout(() => err.remove(), 3000);
 }
 
 // ── Router ─────────────────────────────────────────────────────────
