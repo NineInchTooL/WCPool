@@ -264,7 +264,7 @@ const TRANSLATIONS = {
     failed_update:             'Failed to update.',
     copied:                    '✅ Copied!',
     // Share
-    share_copy:                '🔗 Share',
+    share_copy:                'Share',
     share_copied:              '✅ Link copied!',
     // Elimination banner
     elimination_banner:        '⚠️ {teams} were eliminated from your pool',
@@ -372,7 +372,7 @@ const TRANSLATIONS = {
     failed_update:             'Error al actualizar.',
     copied:                    '✅ ¡Copiado!',
     // Share
-    share_copy:                '🔗 Compartir',
+    share_copy:                'Compartir',
     share_copied:              '✅ ¡Link copiado!',
     // Elimination banner
     elimination_banner:        '⚠️ {teams} fueron eliminados de tu quiniela',
@@ -480,7 +480,7 @@ const TRANSLATIONS = {
     failed_update:             'Falha ao atualizar.',
     copied:                    '✅ Copiado!',
     // Share
-    share_copy:                '🔗 Compartilhar',
+    share_copy:                'Compartilhar',
     share_copied:              '✅ Link copiado!',
     // Elimination banner
     elimination_banner:        '⚠️ {teams} foram eliminados do seu bolão',
@@ -920,14 +920,14 @@ async function renderDashboard() {
   document.getElementById('app').innerHTML = `
     <header class="site-header">
       <div class="header-left">
-        <span class="logo">${LOGO_MARK}<span class="logo-text">WCPool</span></span>
+        <span class="logo">${LOGO_MARK}<span class="logo-text header-wordmark">WCPool</span></span>
       </div>
       <div class="header-right">
         <div class="user-info">
           ${avatar ? `<img class="user-avatar" src="${escHtml(avatar)}" alt="" />` : ''}
           <span class="user-name">${escHtml(name)}</span>
         </div>
-        <button class="btn btn-sm btn-ghost" id="sign-out-btn">${t('sign_out')}</button>
+        <button class="btn btn-sm btn-ghost" id="sign-out-btn" aria-label="${escHtml(t('sign_out'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span class="signout-label">${t('sign_out')}</span></button>
         ${localeSwitcherHTML()}
         <button class="theme-toggle" title="Toggle theme">${themeIcon()}</button>
       </div>
@@ -1276,7 +1276,7 @@ async function renderViewer(poolId) {
   shareWrap.className = 'share-wrap';
   shareWrap.innerHTML = `
     <button id="share-btn" class="btn btn-sm btn-ghost" aria-label="${escHtml(t('share_copy'))}">
-      ${LINK_ICON}<span>${escHtml(t('share_copy'))}</span>
+      ${LINK_ICON}<span class="share-label">${escHtml(t('share_copy'))}</span>
     </button>
     <span id="share-tooltip" class="share-tooltip" aria-live="polite"></span>`;
   viewerActions.appendChild(shareWrap);
