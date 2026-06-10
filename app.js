@@ -291,6 +291,15 @@ const TRANSLATIONS = {
     // Live viewer
     live_indicator:            'Live',
     last_updated:              'Updated just now',
+    // Auth modal
+    auth_modal_title:          'Sign in to save',
+    auth_modal_subtitle:       'Save this pool to your dashboard',
+    auth_google:               'Continue with Google',
+    auth_or_divider:           '— or —',
+    auth_email_placeholder:    'Email address',
+    auth_magic_link_btn:       'Send magic link',
+    auth_check_email:          '✉️ Check your inbox!',
+    auth_check_email_sub:      'We sent a link to {email}',
   },
   'es-MX': {
     landing_subtitle:          'Crea y gestiona tu quiniela del Mundial 2026',
@@ -407,6 +416,15 @@ const TRANSLATIONS = {
     // Live viewer
     live_indicator:            'En vivo',
     last_updated:              'Actualizado ahora',
+    // Auth modal
+    auth_modal_title:          'Inicia sesión para guardar',
+    auth_modal_subtitle:       'Guarda esta quiniela en tu tablero',
+    auth_google:               'Continuar con Google',
+    auth_or_divider:           '— o —',
+    auth_email_placeholder:    'Correo electrónico',
+    auth_magic_link_btn:       'Enviar link mágico',
+    auth_check_email:          '✉️ ¡Revisa tu correo!',
+    auth_check_email_sub:      'Enviamos un link a {email}',
   },
   'pt-PT': {
     landing_subtitle:          'Crie e gerencie o seu bolão da Copa do Mundo 2026',
@@ -523,6 +541,15 @@ const TRANSLATIONS = {
     // Live viewer
     live_indicator:            'Ao vivo',
     last_updated:              'Atualizado agora',
+    // Auth modal
+    auth_modal_title:          'Entra para guardar',
+    auth_modal_subtitle:       'Guarda este bolão no teu painel',
+    auth_google:               'Continuar com Google',
+    auth_or_divider:           '— ou —',
+    auth_email_placeholder:    'Endereço de email',
+    auth_magic_link_btn:       'Enviar link mágico',
+    auth_check_email:          '✉️ Verifique o seu email!',
+    auth_check_email_sub:      'Enviámos um link para {email}',
   },
 };
 
@@ -845,6 +872,109 @@ function showPwaBanner(type) {
     setTimeout(() => banner.remove(), 300);
   });
   document.body.appendChild(banner);
+}
+
+// ── Auth modal (sign in to save) ───────────────────────────────────
+function showAuthModal() {
+  if (document.getElementById('auth-modal')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id        = 'auth-modal';
+  overlay.className = 'modal';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'auth-modal-title');
+
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <div data-auth-state="initial">
+        <h2 id="auth-modal-title" class="modal-title">${escHtml(t('auth_modal_title'))}</h2>
+        <p style="color:var(--color-text-muted);font-size:.9rem;margin-top:-8px;margin-bottom:16px">${escHtml(t('auth_modal_subtitle'))}</p>
+        <button id="auth-google-btn" class="btn auth-btn-google" type="button" aria-label="${escHtml(t('auth_google'))}">
+          ${GOOGLE_ICON}
+          <span>${escHtml(t('auth_google'))}</span>
+        </button>
+        <div class="auth-divider" aria-hidden="true">
+          <span>${escHtml(t('auth_or_divider'))}</span>
+        </div>
+        <form id="auth-magic-form" novalidate>
+          <label for="auth-email" class="sr-only">${escHtml(t('auth_email_placeholder'))}</label>
+          <input
+            id="auth-email"
+            type="email"
+            autocomplete="email"
+            inputmode="email"
+            class="auth-input"
+            placeholder="${escHtml(t('auth_email_placeholder'))}"
+            required
+          />
+          <button id="auth-magic-btn" class="btn auth-btn-magic" type="submit">
+            ${escHtml(t('auth_magic_link_btn'))}
+          </button>
+        </form>
+        <p class="error-msg hidden" id="auth-error"></p>
+      </div>
+      <div class="auth-modal__sent" hidden>
+        <div class="auth-sent-icon">✉️</div>
+        <h3>${escHtml(t('auth_check_email'))}</h3>
+        <p id="auth-sent-detail" class="auth-sent-detail"></p>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('#auth-google-btn').focus();
+
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  overlay.querySelector('#auth-google-btn').addEventListener('click', async () => {
+    const btn = overlay.querySelector('#auth-google-btn');
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    const { error } = await db.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.href },
+    });
+    if (error) {
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+      showAuthError(error.message);
+    }
+  });
+
+  overlay.querySelector('#auth-magic-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const emailInput = overlay.querySelector('#auth-email');
+    const btn        = overlay.querySelector('#auth-magic-btn');
+    const email      = emailInput.value.trim();
+    if (!email || !emailInput.checkValidity()) { emailInput.focus(); return; }
+    btn.disabled = true;
+    const { error } = await db.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.href },
+    });
+    if (error) {
+      btn.disabled = false;
+      showAuthError(error.message);
+      return;
+    }
+    overlay.querySelector('[data-auth-state="initial"]').hidden = true;
+    overlay.querySelector('.auth-modal__sent').hidden = false;
+    overlay.querySelector('#auth-sent-detail').textContent =
+      t('auth_check_email_sub').replace('{email}', email);
+  });
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
 }
 
 // ── Live viewer helpers ────────────────────────────────────────────
@@ -1360,14 +1490,21 @@ async function renderViewer(poolId) {
 
   const viewerActions = document.getElementById('viewer-actions');
 
-  if (currentSession) {
-    if (pool.owner_id === currentSession.user.id) {
-      viewerActions.insertAdjacentHTML('beforeend',
-        `<a href="#/pool/${poolId}/admin" class="btn btn-sm btn-primary">${t('admin')}</a>`);
+  if (currentSession && pool.owner_id === currentSession.user.id) {
+    viewerActions.insertAdjacentHTML('beforeend',
+      `<a href="#/pool/${poolId}/admin" class="btn btn-sm btn-primary">${t('admin')}</a>`);
+  } else {
+    // Pin button — for logged-in non-owners AND anonymous viewers
+    const pinBtn = document.createElement('button');
+    pinBtn.id = 'pin-pool-btn';
+
+    if (!currentSession) {
+      // Anonymous: open auth modal on click
+      pinBtn.textContent = t('pool_save');
+      pinBtn.className   = 'btn btn-sm';
+      pinBtn.addEventListener('click', () => showAuthModal());
     } else {
-      // Pin button for non-owners
-      const pinBtn = document.createElement('button');
-      pinBtn.id = 'pin-pool-btn';
+      // Logged-in non-owner: save / unsave
       let pinned = false;
       const updatePinBtn = (isPinned, disabled = false) => {
         pinBtn.textContent   = isPinned ? t('pool_saved') : t('pool_save');
@@ -1385,8 +1522,8 @@ async function renderViewer(poolId) {
           updatePinBtn(pinned);
         } catch { updatePinBtn(pinned); }
       });
-      viewerActions.appendChild(pinBtn);
     }
+    viewerActions.appendChild(pinBtn);
   }
 
   // Share button — always visible to all viewers
