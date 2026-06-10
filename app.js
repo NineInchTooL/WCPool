@@ -370,6 +370,12 @@ function allocationCardsHTML(pool) {
   }).join('');
 }
 
+// ── Logo SVG mark (hex + W) ────────────────────────────────────────
+const LOGO_MARK = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M14 2L25.26 8.5V21.5L14 28L2.74 21.5V8.5L14 2Z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
+  <path d="M8 10L10.5 18L14 13L17.5 18L20 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>`;
+
 // ── Google SVG ─────────────────────────────────────────────────────
 const GOOGLE_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -392,12 +398,12 @@ function renderLanding() {
   document.getElementById('app').innerHTML = `
     <div class="landing-page">
       <header class="landing-header">
-        <span class="logo">⚽ WCPool</span>
+        <span class="logo">${LOGO_MARK}<span class="logo-text">WCPool</span></span>
         <button class="theme-toggle" title="Toggle theme">${themeIcon()}</button>
       </header>
       <main class="landing-main">
         <div class="landing-card">
-          <div class="landing-icon">⚽</div>
+          <div class="landing-icon"><svg width="56" height="56" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M14 2L25.26 8.5V21.5L14 28L2.74 21.5V8.5L14 2Z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/><path d="M8 10L10.5 18L14 13L17.5 18L20 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></div>
           <h1 class="landing-title">WCPool</h1>
           <p class="landing-subtitle">Create and manage your World Cup 2026 pool</p>
           <div class="landing-divider"></div>
@@ -421,7 +427,7 @@ async function renderDashboard() {
   document.getElementById('app').innerHTML = `
     <header class="site-header">
       <div class="header-left">
-        <span class="logo">⚽ WCPool</span>
+        <span class="logo">${LOGO_MARK}<span class="logo-text">WCPool</span></span>
       </div>
       <div class="header-right">
         <div class="user-info">
