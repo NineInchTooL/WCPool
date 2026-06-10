@@ -1,134 +1,185 @@
-# WCPool — World Cup 2026 Pool Manager
+# WCPool ⚽
 
-A lightweight single-page web app for managing informal World Cup betting
-pools among friends. Live at <https://wc-pool-three.vercel.app>
+A lightweight World Cup 2026 pool manager. Create a pool, assign teams
+to participants via a fair allocation algorithm, track eliminations in
+real-time, and share results via WhatsApp — all from a mobile-first
+progressive web app.
+
+**Live:** <https://wc-pool-three.vercel.app>
+
+---
 
 ## Features
 
-- Google OAuth sign-in (no passwords stored)
-- Create up to 10 pools per account; share a public viewer link with no login required
-- Add 2–48 participants per pool
-- Automatic team allocation algorithm:
-  - 48 FIFA World Cup 2026 teams split across 4 tiers
-  - Tier-balanced distribution: every player gets teams from all 4 tiers
-  - Guarantees `floor(48/N)` teams per player; `(48 % N)` players get one extra
-  - Fully correct for all N in [2, 48]; N > 12 is noted in code comments
-- **Elimination Tracker** — admin marks eliminated teams; updates reflect instantly for all viewers
-- **Live Score Sync** — admin can pull finished group-stage results and get auto-suggested eliminations
-- Admin mode: owner-only panel for participants, allocation, eliminations, and export
-- WhatsApp export: copy formatted pool results to share in a chat
-- Dark / light theme toggle (persists via localStorage)
-- Mobile-responsive design
+- **Pool creation** — configure participant count (2–12), auto-allocate
+  all 48 WC2026 teams across participants using a tiered fairness algorithm
+- **Admin panel** — manage participants, run allocation, track eliminations,
+  export results as a WhatsApp-ready text block
+- **Viewer mode** — shareable read-only link per pool; updates in real-time
+  via Supabase Realtime subscriptions
+- **Live score sync** — admin can sync current elimination suggestions from
+  a live football scores edge function; auto-syncs on open + every 5 min
+- **PWA** — installable on Android (Chrome) and iOS (Safari → Share →
+  Add to Home Screen)
+- **Dark / light mode** — follows system preference, manually toggleable
+
+---
 
 ## Tech Stack
 
-- **Frontend:** Vanilla JS, HTML, CSS (no framework, no build step)
-- **Backend/DB:** Supabase (PostgreSQL + Auth + Realtime)
-- **Edge Functions:** Supabase (score proxy — see below)
-- **Hosting:** Vercel (static deployment, auto-deploys from `main`)
-- **Auth:** Google OAuth via Supabase Auth
+| Layer          | Technology                                      |
+| -------------- | ----------------------------------------------- |
+| Frontend       | Vanilla JS, HTML, CSS (no framework)            |
+| Auth           | Supabase Auth (Google OAuth)                    |
+| Database       | Supabase Postgres                               |
+| Realtime       | Supabase Realtime (postgres_changes)            |
+| Edge Function  | Supabase Edge Function (`wc-scores`)            |
+| Hosting        | Vercel (static)                                 |
+| PWA            | Web App Manifest + Service Worker               |
+
+---
 
 ## Project Structure
 
 ```text
 /
-├── index.html                          # App shell + Supabase config
-├── app.js                              # All routing, views, and business logic
-├── styles.css                          # All styles, dark/light mode, mobile responsive
-└── supabase/functions/wc-scores/       # Edge Function: score proxy
-    └── index.ts
+├── index.html                        # Single-page app shell + PWA meta tags
+├── app.js                            # All application logic (~1 file SPA)
+├── styles.css                        # Design system + component styles
+├── manifest.json                     # PWA manifest
+├── sw.js                             # Service worker (network-first, shell cache)
+├── icons/
+│   └── icon.svg                      # App icon (⚽ on teal, maskable)
+├── supabase/
+│   └── functions/
+│       └── wc-scores/
+│           └── index.ts              # Edge Function: score proxy
+└── README.md
 ```
 
-## Live Score Sync
+---
 
-Admins have a **"🔄 Sync Scores"** button inside the Elimination Tracker. When clicked:
+## Database Schema
 
-1. The client calls the `wc-scores` Supabase Edge Function at `/functions/v1/wc-scores`
-2. The function tries **football-data.org** first (authenticated, server-side only)
-3. If football-data.org fails or returns no usable results, it falls back to **worldcup26.ir**
-4. Both sources are normalized into a shared `{ home, away, homeScore, awayScore, group }` format
-5. The UI suggests eliminations for teams with 0 points after all 3 group matches
-6. Suggestions are ephemeral — they are never saved automatically. The admin confirms each one by clicking it, which uses the same elimination chip flow as manual tracking
+### Table: `pools`
 
-## Edge Function & Secrets
+| Column              | Type          | Notes                              |
+| ------------------- | ------------- | ---------------------------------- |
+| `id`                | `text` (PK)   | nanoid(6) generated on client      |
+| `owner_id`          | `uuid`        | references `auth.users.id`         |
+| `title`             | `text`        | pool name, editable inline         |
+| `participant_count` | `int`         | configured max (2–12)              |
+| `participants`      | `jsonb`       | array of `{ id, name }` objects    |
+| `allocation`        | `jsonb`       | `{ participantId: [team, ...] }`   |
+| `eliminated_teams`  | `jsonb`       | array of team name strings         |
+| `created_at`        | `timestamptz` | auto                               |
 
-The `wc-scores` function requires one secret, set in the Supabase dashboard under **Settings → Edge Functions → Secrets**:
+### RLS Policies
 
-| Secret                  | Used by                   | Exposed to browser?   |
-| ----------------------- | ------------------------- | --------------------- |
-| `FOOTBALL_DATA_API_KEY` | `wc-scores` Edge Function | No — server-side only |
+- `SELECT` — public (anyone with the pool ID can read)
+- `INSERT` — authenticated users only (`owner_id = auth.uid()`)
+- `UPDATE` — authenticated users where `owner_id = auth.uid()`
+- `DELETE` — authenticated users where `owner_id = auth.uid()`
 
-The client authenticates to the Edge Function using the public Supabase anon key (safe for client-side use).
+---
+
+## Edge Function: `wc-scores`
+
+Proxies live World Cup match results server-side to keep API keys out
+of the browser. Tries football-data.org first; falls back to
+worldcup26.ir if the primary fails or returns no data.
+
+**Endpoint:** `GET /functions/v1/wc-scores`  
+**Auth:** Supabase anon key (passed via `apikey` header)  
+**Response:** array of finished group-stage matches
+
+```json
+[
+  { "home": "TeamA", "away": "TeamB", "homeScore": 2, "awayScore": 0, "group": "GROUP_A" }
+]
+```
+
+The admin panel calls this endpoint, builds group standings from the
+match data, and surfaces teams with 0 points after 3 games as
+clickable elimination suggestion chips. Suggestions are never
+persisted automatically — the admin confirms each one.
+
+**Required secret** (set in Supabase Dashboard → Settings → Edge Functions → Secrets):
+
+| Secret                   | Used by           |
+| ------------------------ | ----------------- |
+| `FOOTBALL_DATA_API_KEY`  | `wc-scores` only  |
+
+---
+
+## Allocation Algorithm
+
+Teams are divided into 4 tiers by FIFA ranking (12 teams each).
+Each participant receives a proportional slice across all tiers
+to ensure no participant gets all top-tier or all bottom-tier teams.
+
+- Max supported participants: **12**
+- Total teams: **48** (WC2026 expanded format)
+- Each participant gets: **floor(48 ÷ N)** teams; `48 % N` players get one extra
+
+---
+
+## Local Development
+
+```bash
+# No build step — serve the repo root with any static server
+npx serve .
+# or
+python3 -m http.server 8080
+```
+
+Supabase credentials (`SUPABASE_URL` and `SUPABASE_ANON_KEY`) are set
+as inline globals in `index.html`. These are public anon keys — safe
+to commit.
+
+For local OAuth to work, add `http://localhost:8080` as an allowed
+redirect URL in your Supabase project's Auth settings.
+
+---
 
 ## Deployment
 
-**Frontend** — push to `main`; Vercel deploys automatically.
+Deployed on Vercel via GitHub integration. Every push to `main`
+triggers a new deployment automatically.
 
-**Edge Functions** — must be deployed separately via the Supabase CLI:
+```bash
+git push origin main   # → Vercel auto-deploys in ~30s
+```
+
+No build command or output directory needed — Vercel serves the repo
+root as static files.
+
+**Edge Function** must be deployed separately via the Supabase CLI:
 
 ```bash
 supabase login
 supabase functions deploy wc-scores --project-ref <project-ref> --no-verify-jwt
 ```
 
-After adding or changing secrets in the dashboard, redeploy the function for changes to take effect.
+After adding or changing secrets in the dashboard, redeploy the
+function for changes to take effect.
 
-**Local development** — no build step required:
+---
 
-```bash
-npx serve .
-# or
-python3 -m http.server 8080
-```
+## PWA Installation
 
-Note: Google OAuth `redirectTo` is hardcoded to the Vercel URL. For local dev, add `http://localhost:8080` as an allowed redirect URL in your Supabase project's Auth settings.
+**Android (Chrome):** Browser shows "Add to Home Screen" banner
+automatically after a few visits.
 
-## Database Schema (Supabase)
+**iOS (Safari):** Tap Share → "Add to Home Screen" → Add.
 
-**Table: `pools`**
+The service worker caches the app shell (`/`, `app.js`, `styles.css`,
+`manifest.json`) for offline-capable loading. Supabase API calls
+always go network-first and are never intercepted by the SW.
 
-| Column              | Type                   | Notes                                       |
-| ------------------- | ---------------------- | ------------------------------------------- |
-| id                  | text (PK)              | 6-char nanoid                               |
-| owner_id            | uuid (FK → auth.users) | Pool owner                                  |
-| title               | text                   | Pool display name                           |
-| participant_count   | int                    | Target number of participants               |
-| participants        | jsonb                  | Array of `{ id, name, extraTeam }`          |
-| allocation          | jsonb                  | Map of `participantId → team[]`             |
-| allocation_locked   | bool                   | Prevents re-allocation when true            |
-| eliminated_teams    | jsonb                  | Array of eliminated team identifier strings |
-| team_set            | text                   | Always `"WC2026"` for now                   |
-| created_at          | timestamptz            | Auto                                        |
-| updated_at          | timestamptz            | Updated on save                             |
-
-**Table: `profiles`**
-
-| Column        | Type                       | Notes                      |
-| ------------- | -------------------------- | -------------------------- |
-| id            | uuid (PK, FK → auth.users) |                            |
-| display_name  | text                       | From Google OAuth metadata |
-| avatar_url    | text                       | From Google OAuth metadata |
-
-## Row Level Security
-
-- `pools`: Public SELECT (viewer mode); INSERT/UPDATE/DELETE restricted to `owner_id = auth.uid()`
-- `profiles`: Public SELECT; INSERT/UPDATE restricted to own row
-
-## Allocation Algorithm
-
-See the `allocate()` function in `app.js`. Three phases:
-
-1. **Tier base rounds** — `floor(12/N)` teams per tier to every player (guarantees tier balance)
-2. **Extra base rounds** — fills the gap between tier-base total and `floor(48/N)` using leftover cross-tier teams, one per player per round
-3. **Final partial round** — one extra team to exactly `48 % N` players
-
-## Notes
-
-- The Supabase anon key in `index.html` is public/publishable by design — safe for client-side use
-- Pool IDs are 6-char nanoids (case-sensitive alphanumeric, ~56 billion combinations)
-- Realtime uses Supabase Postgres Changes on UPDATE events only
-- Live score suggestions are UI-only state; `eliminated_teams` in the database is the source of truth
+---
 
 ## Author
 
-Built by [NineInchTooL](https://github.com/NineInchTooL) for family and friends during the World Cup 2026 🏆
+Built by [@NineInchTooL](https://github.com/NineInchTooL) for
+WC2026 office pools. 🏆
