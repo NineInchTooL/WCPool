@@ -346,11 +346,14 @@ function allocationCardsHTML(pool) {
     const teams = pool.allocation[p.id] || [];
     const alive = teams.filter(t => !eliminated.includes(teamId(t))).length;
     const out   = teams.length - alive;
-    const teamsHtml = teams.map(t => {
+    const aliveTeams   = teams.filter(t => !eliminated.includes(teamId(t)));
+    const deadTeams    = teams.filter(t =>  eliminated.includes(teamId(t)));
+    const orderedTeams = [...aliveTeams, ...deadTeams];
+    const teamsHtml = orderedTeams.map(t => {
       const isElim = eliminated.includes(teamId(t));
       return `<li class="${isElim ? 'team-eliminated' : ''}">
         <span class="tier-dot tier-${t.tier}"></span>
-        ${isElim ? '❌ ' : ''}${escHtml(t.flag)} ${escHtml(t.name)}
+        ${isElim ? '❌ ' : '✅ '}${escHtml(t.flag)} ${escHtml(t.name)}
       </li>`;
     }).join('');
     const statusText = out === 0
@@ -675,7 +678,18 @@ function renderViewerContent(pool) {
   const lockNotice = pool.allocation_locked
     ? '<p class="lock-notice">🔒 Allocation locked</p>' : '';
 
-  content.innerHTML = lockNotice + `<div class="alloc-grid">${allocationCardsHTML(pool)}</div>`;
+  const elim = pool.eliminated_teams || [];
+  const totalAlive = 48 - elim.length;
+  const bannerHTML = elim.length > 0
+    ? `<div class="elim-banner">
+         <span class="elim-banner-stat">
+           ⚽ <strong>${totalAlive}</strong> teams still in ·
+           ❌ <strong>${elim.length}</strong> eliminated
+         </span>
+       </div>`
+    : '';
+
+  content.innerHTML = lockNotice + bannerHTML + `<div class="alloc-grid">${allocationCardsHTML(pool)}</div>`;
 }
 
 // ── Admin mode ─────────────────────────────────────────────────────

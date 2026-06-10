@@ -514,11 +514,29 @@ input[type="range"] {
 .tier-4 { background: var(--tier-4); }
 
 .team-eliminated {
-  opacity: 0.4;
+  opacity: 0.45;
   text-decoration: line-through;
+  text-decoration-color: var(--color-text-faint);
   color: var(--color-text-muted);
 }
 .team-eliminated .tier-dot { opacity: 0.3; }
+
+/* ── Elimination banner — viewer ─────────────────────────────── */
+.elim-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+.elim-banner strong { color: var(--color-text); }
 
 /* ── Admin heading ───────────────────────────────────────────── */
 .admin-title-wrap { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
