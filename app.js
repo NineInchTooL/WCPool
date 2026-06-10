@@ -262,6 +262,9 @@ const TRANSLATIONS = {
     failed_delete_pool:        'Failed to delete pool.',
     failed_update:             'Failed to update.',
     copied:                    '✅ Copied!',
+    // Share
+    share_copy:                '🔗 Share',
+    share_copied:              '✅ Link copied!',
     // Saved pools
     pool_save:                 '📌 Save',
     pool_saved:                '✅ Saved',
@@ -364,6 +367,9 @@ const TRANSLATIONS = {
     failed_delete_pool:        'Error al eliminar la quiniela.',
     failed_update:             'Error al actualizar.',
     copied:                    '✅ ¡Copiado!',
+    // Share
+    share_copy:                '🔗 Compartir',
+    share_copied:              '✅ ¡Link copiado!',
     // Saved pools
     pool_save:                 '📌 Guardar',
     pool_saved:                '✅ Guardada',
@@ -466,6 +472,9 @@ const TRANSLATIONS = {
     failed_delete_pool:        'Falha ao eliminar o bolão.',
     failed_update:             'Falha ao atualizar.',
     copied:                    '✅ Copiado!',
+    // Share
+    share_copy:                '🔗 Compartilhar',
+    share_copied:              '✅ Link copiado!',
     // Saved pools
     pool_save:                 '📌 Guardar',
     pool_saved:                '✅ Guardada',
@@ -569,6 +578,29 @@ async function copyToClipboard(text, btn) {
     btn.textContent = t('copied');
     setTimeout(() => { btn.textContent = orig; }, 2000);
   } catch { /* silent */ }
+}
+
+async function sharePool(poolId, poolTitle) {
+  const url = `${window.location.origin}${window.location.pathname}#/pool/${poolId}`;
+  const shareData = { title: poolTitle || 'WCPool', url };
+  if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+    try { await navigator.share(shareData); return; }
+    catch (err) { if (err.name === 'AbortError') return; }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    showShareTooltip();
+  } catch {
+    prompt(t('share_copy'), url);
+  }
+}
+
+function showShareTooltip() {
+  const tooltip = document.getElementById('share-tooltip');
+  if (!tooltip) return;
+  tooltip.textContent = t('share_copied');
+  tooltip.classList.add('share-tooltip--visible');
+  setTimeout(() => tooltip.classList.remove('share-tooltip--visible'), 2000);
 }
 
 function teamId(team) { return `${team.flag} ${team.name}`; }
@@ -819,6 +851,9 @@ const LOGO_MARK = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" x
   <path d="M14 2L25.26 8.5V21.5L14 28L2.74 21.5V8.5L14 2Z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
   <path d="M8 10L10.5 18L14 13L17.5 18L20 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
 </svg>`;
+
+// ── Link/chain SVG (share button) ─────────────────────────────────
+const LINK_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`;
 
 // ── Google SVG ─────────────────────────────────────────────────────
 const GOOGLE_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
@@ -1126,7 +1161,7 @@ async function renderViewer(poolId) {
   cleanupRealtime();
 
   document.getElementById('app').innerHTML = `
-    <header class="site-header">
+    <header class="site-header viewer-header">
       <div class="header-left">
         <a href="#/" class="header-back">← <span class="header-back-text">${t('my_pools_back')}</span></a>
       </div>
@@ -1134,6 +1169,7 @@ async function renderViewer(poolId) {
         <span class="byline">by NineInchTooL</span>
       </div>
       <div class="header-right" id="viewer-header-right">
+        <div id="viewer-actions" class="viewer-actions"></div>
         ${localeSwitcherHTML()}
         <button class="theme-toggle" title="Toggle theme">${themeIcon()}</button>
       </div>
@@ -1159,21 +1195,21 @@ async function renderViewer(poolId) {
     return;
   }
 
-  const headerRight = document.getElementById('viewer-header-right');
+  const viewerActions = document.getElementById('viewer-actions');
+
   if (currentSession) {
     if (pool.owner_id === currentSession.user.id) {
-      headerRight.insertAdjacentHTML('afterbegin',
+      viewerActions.insertAdjacentHTML('beforeend',
         `<a href="#/pool/${poolId}/admin" class="btn btn-sm btn-primary">${t('admin')}</a>`);
     } else {
       // Pin button for non-owners
       const pinBtn = document.createElement('button');
-      pinBtn.className = 'btn btn-sm';
       pinBtn.id = 'pin-pool-btn';
       let pinned = false;
       const updatePinBtn = (isPinned, disabled = false) => {
-        pinBtn.textContent = isPinned ? t('pool_saved') : t('pool_save');
-        pinBtn.className   = `btn btn-sm${isPinned ? ' btn-saved' : ''}`;
-        pinBtn.disabled    = disabled;
+        pinBtn.textContent   = isPinned ? t('pool_saved') : t('pool_save');
+        pinBtn.className     = `btn btn-sm${isPinned ? ' btn-saved' : ''}`;
+        pinBtn.disabled      = disabled;
         pinBtn.style.opacity = disabled ? '0.5' : '';
       };
       try { pinned = await isPoolSaved(currentSession.user.id, poolId); } catch { /* ignore */ }
@@ -1186,16 +1222,42 @@ async function renderViewer(poolId) {
           updatePinBtn(pinned);
         } catch { updatePinBtn(pinned); }
       });
-      headerRight.insertAdjacentElement('afterbegin', pinBtn);
+      viewerActions.appendChild(pinBtn);
     }
   }
 
+  // Share button — always visible to all viewers
+  const shareWrap = document.createElement('div');
+  shareWrap.className = 'share-wrap';
+  shareWrap.innerHTML = `
+    <button id="share-btn" class="btn btn-sm btn-ghost" aria-label="${escHtml(t('share_copy'))}">
+      ${LINK_ICON}<span>${escHtml(t('share_copy'))}</span>
+    </button>
+    <span id="share-tooltip" class="share-tooltip" aria-live="polite"></span>`;
+  viewerActions.appendChild(shareWrap);
+  shareWrap.querySelector('#share-btn').addEventListener('click', () => sharePool(pool.id, pool.title));
+
   renderViewerContent(pool);
+
+  // Track last-known eliminations for non-owner realtime alerts
+  let lastKnownEliminated = new Set(pool.eliminated_teams || []);
+  if (currentSession && pool.owner_id !== currentSession.user.id) {
+    checkEliminationsOnLoad(pool);
+  }
+
   subscribeToPool(poolId, updated => {
-    if (typeof updated.allocation      === 'string') updated.allocation      = JSON.parse(updated.allocation);
-    if (typeof updated.eliminated_teams === 'string') updated.eliminated_teams = JSON.parse(updated.eliminated_teams);
-    if (typeof updated.participants     === 'string') updated.participants     = JSON.parse(updated.participants);
+    if (typeof updated.allocation       === 'string') updated.allocation       = JSON.parse(updated.allocation);
+    if (typeof updated.eliminated_teams  === 'string') updated.eliminated_teams  = JSON.parse(updated.eliminated_teams);
+    if (typeof updated.participants      === 'string') updated.participants      = JSON.parse(updated.participants);
     renderViewerContent(updated);
+
+    // Elimination alerts for non-owner saved-pool viewers
+    if (currentSession && pool.owner_id !== currentSession.user.id) {
+      const newElim  = updated.eliminated_teams || [];
+      const newly    = newElim.filter(name => !lastKnownEliminated.has(name));
+      if (newly.length) showEliminationBanner(poolId, newly);
+      lastKnownEliminated = new Set(newElim);
+    }
   });
 }
 

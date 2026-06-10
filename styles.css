@@ -839,6 +839,37 @@ details.elim-card[open] > summary {
   font-weight: 700;
 }
 
+/* ── Viewer actions + share ──────────────────────────────────── */
+.viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.share-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.share-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  white-space: nowrap;
+  background: var(--color-surface2);
+  color: var(--color-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font: 500 0.75rem var(--font-body);
+  padding: 4px 9px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 10;
+}
+.share-tooltip--visible {
+  opacity: 1;
+}
+
 /* ── Saved pools ─────────────────────────────────────────────── */
 .btn-saved {
   background: color-mix(in srgb, var(--color-primary) 15%, transparent);
