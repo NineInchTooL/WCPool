@@ -262,6 +262,12 @@ const TRANSLATIONS = {
     failed_delete_pool:        'Failed to delete pool.',
     failed_update:             'Failed to update.',
     copied:                    '✅ Copied!',
+    // Saved pools
+    pool_save:                 '📌 Save',
+    pool_saved:                '✅ Saved',
+    saved_pools_section:       'Saved Pools',
+    saved_pools_empty:         'Save pools from friends to see them here',
+    unpin:                     'Unpin',
   },
   'es-MX': {
     landing_subtitle:          'Crea y gestiona tu quiniela del Mundial 2026',
@@ -358,6 +364,12 @@ const TRANSLATIONS = {
     failed_delete_pool:        'Error al eliminar la quiniela.',
     failed_update:             'Error al actualizar.',
     copied:                    '✅ ¡Copiado!',
+    // Saved pools
+    pool_save:                 '📌 Guardar',
+    pool_saved:                '✅ Guardada',
+    saved_pools_section:       'Quinielas Guardadas',
+    saved_pools_empty:         'Guarda quinielas de amigos para verlas aquí',
+    unpin:                     'Quitar',
   },
   'pt-PT': {
     landing_subtitle:          'Crie e gerencie o seu bolão da Copa do Mundo 2026',
@@ -454,6 +466,12 @@ const TRANSLATIONS = {
     failed_delete_pool:        'Falha ao eliminar o bolão.',
     failed_update:             'Falha ao atualizar.',
     copied:                    '✅ Copiado!',
+    // Saved pools
+    pool_save:                 '📌 Guardar',
+    pool_saved:                '✅ Guardada',
+    saved_pools_section:       'Bolões Guardados',
+    saved_pools_empty:         'Guarda bolões de amigos para vê-los aqui',
+    unpin:                     'Remover',
   },
 };
 
@@ -650,10 +668,47 @@ async function fetchUserPools() {
   return data || [];
 }
 
-async function savePool(pool) {
+async function persistPool(pool) {
   const { error } = await db.from('pools')
     .upsert({ ...pool, updated_at: new Date().toISOString() }, { onConflict: 'id' });
   if (error) throw error;
+}
+
+// ── Saved pools (pin) ──────────────────────────────────────────────
+async function getSavedPools(userId) {
+  const { data, error } = await db
+    .from('saved_pools')
+    .select('pool_id, saved_at, pools(*)')
+    .eq('user_id', userId);
+  if (error) throw error;
+  return data || [];
+}
+
+async function savePool(userId, poolId) {
+  const { error } = await db
+    .from('saved_pools')
+    .upsert({ user_id: userId, pool_id: poolId }, { onConflict: 'user_id,pool_id' });
+  if (error) throw error;
+}
+
+async function unsavePool(userId, poolId) {
+  const { error } = await db
+    .from('saved_pools')
+    .delete()
+    .eq('user_id', userId)
+    .eq('pool_id', poolId);
+  if (error) throw error;
+}
+
+async function isPoolSaved(userId, poolId) {
+  const { data, error } = await db
+    .from('saved_pools')
+    .select('pool_id')
+    .eq('user_id', userId)
+    .eq('pool_id', poolId)
+    .maybeSingle();
+  if (error) throw error;
+  return !!data;
 }
 
 async function fetchLiveScores() {
@@ -884,9 +939,12 @@ async function renderDashboard() {
   document.getElementById('sign-out-btn').addEventListener('click', async () => { await db.auth.signOut(); });
   document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
 
-  let pools = [];
+  let pools = [], savedEntries = [];
   try {
-    pools = await fetchUserPools();
+    [pools, savedEntries] = await Promise.all([
+      fetchUserPools(),
+      getSavedPools(user.id),
+    ]);
   } catch {
     document.getElementById('dashboard-content').innerHTML =
       `<p class="error-msg">${t('failed_load_pools')}</p>`;
@@ -894,32 +952,41 @@ async function renderDashboard() {
     return;
   }
 
-  renderPoolGrid(pools);
-  bindDashboardModals(pools);
+  renderPoolGrid(pools, savedEntries);
+  bindDashboardModals(pools, savedEntries);
 }
 
-function renderPoolGrid(pools) {
+function renderPoolGrid(pools, savedEntries = []) {
   const MAX = 10;
   document.getElementById('pool-count-badge').textContent = `${pools.length} / ${MAX}`;
 
   const createBtn = document.getElementById('create-pool-btn');
-  if (pools.length >= MAX) {
-    createBtn.disabled = true;
-  }
+  if (pools.length >= MAX) createBtn.disabled = true;
 
   const container = document.getElementById('dashboard-content');
-  if (!pools.length) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">🏆</div>
-        <p class="empty-state-title">${t('no_pools_title')}</p>
-        <p class="empty-state-desc">${t('no_pools_desc')}</p>
-      </div>`;
-    return;
-  }
 
-  container.innerHTML = `<div class="pool-grid">${pools.map(poolCardHTML).join('')}</div>
-    ${pools.length >= MAX ? `<p class="limit-msg">${t('pool_limit_msg')}</p>` : ''}`;
+  // Owned pools section
+  const ownedHTML = pools.length
+    ? `<div class="pool-grid">${pools.map(poolCardHTML).join('')}</div>
+       ${pools.length >= MAX ? `<p class="limit-msg">${t('pool_limit_msg')}</p>` : ''}`
+    : `<div class="empty-state">
+         <div class="empty-state-icon">🏆</div>
+         <p class="empty-state-title">${t('no_pools_title')}</p>
+         <p class="empty-state-desc">${t('no_pools_desc')}</p>
+       </div>`;
+
+  // Saved pools section
+  const validSaved = savedEntries.filter(e => e.pools);
+  const savedHTML = validSaved.length
+    ? `<div class="pool-grid">${validSaved.map(e => savedPoolCardHTML(e.pools)).join('')}</div>`
+    : `<p class="hint saved-pools-empty">${t('saved_pools_empty')}</p>`;
+
+  container.innerHTML = `
+    ${ownedHTML}
+    <div class="saved-pools-section">
+      <h2 class="saved-pools-heading">${t('saved_pools_section')}</h2>
+      ${savedHTML}
+    </div>`;
 }
 
 function poolCardHTML(pool) {
@@ -941,7 +1008,25 @@ function poolCardHTML(pool) {
   </div>`;
 }
 
-function bindDashboardModals(pools) {
+function savedPoolCardHTML(pool) {
+  const badges = [
+    pool.allocation        ? `<span class="badge badge-success">${t('badge_allocated')}</span>` : '',
+    pool.allocation_locked ? `<span class="badge badge-warning">${t('badge_locked')}</span>`   : '',
+  ].filter(Boolean).join('');
+
+  return `<div class="pool-card pool-card--saved" data-id="${escHtml(pool.id)}">
+    <div class="pool-card-title">📌 ${escHtml(pool.title)}</div>
+    <div class="pool-card-meta">${t('players', (pool.participants || []).length)} / ${pool.participant_count}</div>
+    <div class="pool-card-badges">${badges}</div>
+    <div class="pool-card-actions">
+      <a href="#/pool/${pool.id}" class="btn btn-sm">${t('view')}</a>
+      <span class="spacer"></span>
+      <button class="btn btn-sm unpin-pool-btn" data-id="${escHtml(pool.id)}" title="Unpin">${t('unpin')}</button>
+    </div>
+  </div>`;
+}
+
+function bindDashboardModals(pools, savedEntries = []) {
   const modal    = document.getElementById('create-modal');
   const countEl  = document.getElementById('new-count');
   const countVal = document.getElementById('new-count-val');
@@ -988,7 +1073,29 @@ function bindDashboardModals(pools) {
   const delModal = document.getElementById('delete-modal');
   let pendingDeleteId = null;
 
-  document.getElementById('dashboard-content').addEventListener('click', e => {
+  document.getElementById('dashboard-content').addEventListener('click', async e => {
+    // Unpin button
+    const unpinBtn = e.target.closest('.unpin-pool-btn');
+    if (unpinBtn) {
+      unpinBtn.disabled = true;
+      unpinBtn.style.opacity = '0.5';
+      try {
+        await unsavePool(currentSession.user.id, unpinBtn.dataset.id);
+        unpinBtn.closest('.pool-card--saved')?.remove();
+        // Re-check if saved section is now empty
+        const remaining = document.querySelectorAll('.pool-card--saved');
+        if (!remaining.length) {
+          const grid = document.querySelector('.saved-pools-section .pool-grid');
+          if (grid) grid.outerHTML = `<p class="hint saved-pools-empty">${t('saved_pools_empty')}</p>`;
+        }
+      } catch {
+        unpinBtn.disabled = false;
+        unpinBtn.style.opacity = '';
+      }
+      return;
+    }
+
+    // Delete button
     const btn = e.target.closest('.delete-pool-btn');
     if (!btn) return;
     pendingDeleteId = btn.dataset.id;
@@ -1052,10 +1159,35 @@ async function renderViewer(poolId) {
     return;
   }
 
-  // Add admin button if current user is owner
-  if (currentSession && pool.owner_id === currentSession.user.id) {
-    document.getElementById('viewer-header-right').insertAdjacentHTML('afterbegin',
-      `<a href="#/pool/${poolId}/admin" class="btn btn-sm btn-primary">${t('admin')}</a>`);
+  const headerRight = document.getElementById('viewer-header-right');
+  if (currentSession) {
+    if (pool.owner_id === currentSession.user.id) {
+      headerRight.insertAdjacentHTML('afterbegin',
+        `<a href="#/pool/${poolId}/admin" class="btn btn-sm btn-primary">${t('admin')}</a>`);
+    } else {
+      // Pin button for non-owners
+      const pinBtn = document.createElement('button');
+      pinBtn.className = 'btn btn-sm';
+      pinBtn.id = 'pin-pool-btn';
+      let pinned = false;
+      const updatePinBtn = (isPinned, disabled = false) => {
+        pinBtn.textContent = isPinned ? t('pool_saved') : t('pool_save');
+        pinBtn.className   = `btn btn-sm${isPinned ? ' btn-saved' : ''}`;
+        pinBtn.disabled    = disabled;
+        pinBtn.style.opacity = disabled ? '0.5' : '';
+      };
+      try { pinned = await isPoolSaved(currentSession.user.id, poolId); } catch { /* ignore */ }
+      updatePinBtn(pinned);
+      pinBtn.addEventListener('click', async () => {
+        updatePinBtn(pinned, true);
+        try {
+          if (pinned) { await unsavePool(currentSession.user.id, poolId); pinned = false; }
+          else        { await savePool(currentSession.user.id, poolId);   pinned = true;  }
+          updatePinBtn(pinned);
+        } catch { updatePinBtn(pinned); }
+      });
+      headerRight.insertAdjacentElement('afterbegin', pinBtn);
+    }
   }
 
   renderViewerContent(pool);
@@ -1264,7 +1396,7 @@ function bindAdminEvents(pool) {
       errEl.textContent = t('must_be_2_12'); errEl.classList.remove('hidden'); return;
     }
     pool.participant_count = val;
-    try { await savePool(pool); renderAdminPanel(pool); }
+    try { await persistPool(pool); renderAdminPanel(pool); }
     catch { errEl.textContent = t('save_failed'); errEl.classList.remove('hidden'); }
   });
 
@@ -1290,7 +1422,7 @@ function bindAdminEvents(pool) {
     if (pool.allocation_locked || !pool.participants?.length) return;
     if (pool.allocation && !confirm(t('confirm_realloc'))) return;
     pool.allocation = allocate(pool.participants);
-    try { await savePool(pool); refreshAllocUI(pool); }
+    try { await persistPool(pool); refreshAllocUI(pool); }
     catch { showAdminError(t('failed_save_allocation')); }
   });
 
@@ -1303,7 +1435,7 @@ function bindAdminEvents(pool) {
       pool.allocation_locked = true;
     }
     try {
-      await savePool(pool);
+      await persistPool(pool);
       document.getElementById('lock-btn').textContent =
         pool.allocation_locked ? t('unlock_allocation') : t('lock_allocation');
       document.getElementById('allocate-btn').disabled = pool.allocation_locked;
@@ -1318,7 +1450,7 @@ function bindAdminEvents(pool) {
     if (pool.allocation_locked) return;
     if (!confirm(t('confirm_clear'))) return;
     pool.allocation = null;
-    try { await savePool(pool); refreshAllocUI(pool); }
+    try { await persistPool(pool); refreshAllocUI(pool); }
     catch { showAdminError(t('failed_clear_allocation')); }
   });
 
@@ -1353,7 +1485,7 @@ function bindTitleEdit(pool) {
     const save = async () => {
       const val = input.value.trim() || pool.title;
       pool.title = val;
-      try { await savePool(pool); } catch { /* silent */ }
+      try { await persistPool(pool); } catch { /* silent */ }
       const span = document.createElement('span');
       span.id = 'admin-title-el';
       span.className = 'pool-title-editable';
@@ -1398,7 +1530,7 @@ async function addParticipant(pool) {
   nameInput.value = '';
   if (extraInput) extraInput.checked = false;
   try {
-    await savePool(pool);
+    await persistPool(pool);
     renderParticipantsList(pool);
     updateParticipantCounter(pool);
     refreshAllocUI(pool);
@@ -1458,7 +1590,7 @@ function editParticipantInline(pool, id) {
     if (!newName) return;
     p.name = newName;
     p.extraTeam = row.querySelector('.p-edit-extra')?.checked || false;
-    try { await savePool(pool); } catch { showAdminError(t('failed_save')); }
+    try { await persistPool(pool); } catch { showAdminError(t('failed_save')); }
     renderParticipantsList(pool);
     refreshAllocUI(pool);
   });
@@ -1473,7 +1605,7 @@ async function removeParticipant(pool, id) {
   pool.participants = (pool.participants || []).filter(p => p.id !== id);
   if (pool.allocation) delete pool.allocation[id];
   try {
-    await savePool(pool);
+    await persistPool(pool);
     renderParticipantsList(pool);
     updateParticipantCounter(pool);
     refreshAllocUI(pool);
@@ -1570,7 +1702,7 @@ function renderEliminationTracker(pool) {
         const elim = pool.eliminated_teams || [];
         const idx  = elim.indexOf(id);
         pool.eliminated_teams = idx === -1 ? [...elim, id] : elim.filter(n => n !== id);
-        try { await savePool(pool); renderEliminationTracker(pool); refreshAllocUI(pool); }
+        try { await persistPool(pool); renderEliminationTracker(pool); refreshAllocUI(pool); }
         catch { showAdminError(t('failed_update')); saving = false; }
       });
       chips.appendChild(chip);
