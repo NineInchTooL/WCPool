@@ -1,3 +1,10 @@
+// PWA install prompt — must be captured synchronously before any await
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+
 /*
   SECURITY NOTE:
   - SUPABASE_ANON_KEY is a public/publishable key — safe in client-side code.
@@ -147,6 +154,7 @@ let currentSession = null;
 let realtimeChannel = null;
 let currentSuggestions = [];
 let elimSyncIntervalId = null;
+let lastUpdatedInterval = null;
 const dismissedEliminationNotices = new Map(); // poolId → Set<teamName>
 
 // ── i18n ───────────────────────────────────────────────────────────
@@ -275,6 +283,14 @@ const TRANSLATIONS = {
     saved_pools_section:       'Saved Pools',
     saved_pools_empty:         'Save pools from friends to see them here',
     unpin:                     'Unpin',
+    // PWA
+    pwa_install_prompt:        'Add WCPool to your home screen',
+    pwa_install_cta:           'Install',
+    pwa_install_ios:           'Tap the share icon then "Add to Home Screen"',
+    pwa_dismiss:               'Maybe later',
+    // Live viewer
+    live_indicator:            'Live',
+    last_updated:              'Updated just now',
   },
   'es-MX': {
     landing_subtitle:          'Crea y gestiona tu quiniela del Mundial 2026',
@@ -383,6 +399,14 @@ const TRANSLATIONS = {
     saved_pools_section:       'Quinielas Guardadas',
     saved_pools_empty:         'Guarda quinielas de amigos para verlas aquí',
     unpin:                     'Quitar',
+    // PWA
+    pwa_install_prompt:        'Agrega WCPool a tu pantalla de inicio',
+    pwa_install_cta:           'Instalar',
+    pwa_install_ios:           'Toca el ícono compartir y luego "Añadir a pantalla de inicio"',
+    pwa_dismiss:               'Quizás después',
+    // Live viewer
+    live_indicator:            'En vivo',
+    last_updated:              'Actualizado ahora',
   },
   'pt-PT': {
     landing_subtitle:          'Crie e gerencie o seu bolão da Copa do Mundo 2026',
@@ -491,6 +515,14 @@ const TRANSLATIONS = {
     saved_pools_section:       'Bolões Guardados',
     saved_pools_empty:         'Guarda bolões de amigos para vê-los aqui',
     unpin:                     'Remover',
+    // PWA
+    pwa_install_prompt:        'Adiciona WCPool ao ecrã inicial',
+    pwa_install_cta:           'Instalar',
+    pwa_install_ios:           'Toca o ícone de partilha e depois "Adicionar ao ecrã"',
+    pwa_dismiss:               'Talvez depois',
+    // Live viewer
+    live_indicator:            'Ao vivo',
+    last_updated:              'Atualizado agora',
   },
 };
 
@@ -731,6 +763,7 @@ async function savePool(userId, poolId) {
     .from('saved_pools')
     .upsert({ user_id: userId, pool_id: poolId }, { onConflict: 'user_id,pool_id' });
   if (error) throw error;
+  await maybeShowPwaPrompt();
 }
 
 async function unsavePool(userId, poolId) {
@@ -751,6 +784,90 @@ async function isPoolSaved(userId, poolId) {
     .maybeSingle();
   if (error) throw error;
   return !!data;
+}
+
+// ── PWA install prompt ─────────────────────────────────────────────
+function isIosSafari() {
+  const ua = navigator.userAgent;
+  const isIos    = /iphone|ipad|ipod/i.test(ua);
+  const isSafari = /safari/i.test(ua) && !/crios|fxios|opios|edgios/i.test(ua);
+  return isIos && isSafari;
+}
+
+function isInStandaloneMode() {
+  return window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+}
+
+async function maybeShowPwaPrompt() {
+  if (isInStandaloneMode()) return;
+  if (sessionStorage.getItem('pwa-prompt-dismissed')) return;
+  await new Promise(r => setTimeout(r, 1500));
+  if (deferredInstallPrompt) {
+    showPwaBanner('android');
+  } else if (isIosSafari()) {
+    showPwaBanner('ios');
+  }
+}
+
+function showPwaBanner(type) {
+  if (document.getElementById('pwa-banner')) return;
+  const banner = document.createElement('div');
+  banner.id        = 'pwa-banner';
+  banner.className = 'pwa-banner';
+  banner.setAttribute('role', 'complementary');
+  banner.setAttribute('aria-label', t('pwa_install_prompt'));
+  if (type === 'ios') {
+    banner.innerHTML = `
+      <span class="pwa-banner__text">${escHtml(t('pwa_install_ios'))}</span>
+      <button class="pwa-banner__dismiss btn btn-sm btn-ghost"
+              aria-label="${escHtml(t('pwa_dismiss'))}">${escHtml(t('pwa_dismiss'))}</button>`;
+  } else {
+    banner.innerHTML = `
+      <span class="pwa-banner__text">${escHtml(t('pwa_install_prompt'))}</span>
+      <div class="pwa-banner__actions">
+        <button class="pwa-banner__install btn btn-sm btn-primary">${escHtml(t('pwa_install_cta'))}</button>
+        <button class="pwa-banner__dismiss btn btn-sm btn-ghost"
+                aria-label="${escHtml(t('pwa_dismiss'))}">${escHtml(t('pwa_dismiss'))}</button>
+      </div>`;
+    banner.querySelector('.pwa-banner__install').addEventListener('click', async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      banner.remove();
+      if (outcome === 'accepted') sessionStorage.setItem('pwa-prompt-dismissed', '1');
+    });
+  }
+  banner.querySelector('.pwa-banner__dismiss').addEventListener('click', () => {
+    sessionStorage.setItem('pwa-prompt-dismissed', '1');
+    banner.classList.add('pwa-banner--dismissed');
+    setTimeout(() => banner.remove(), 300);
+  });
+  document.body.appendChild(banner);
+}
+
+// ── Live viewer helpers ────────────────────────────────────────────
+function updateLastUpdatedLabel() {
+  const el = document.getElementById('last-updated');
+  if (!el) return;
+  if (lastUpdatedInterval) { clearInterval(lastUpdatedInterval); lastUpdatedInterval = null; }
+  el.style.display = 'inline';
+  el.textContent   = t('last_updated');
+  let secs = 0;
+  lastUpdatedInterval = setInterval(() => {
+    secs += 30;
+    const cur = document.getElementById('last-updated');
+    if (!cur) { clearInterval(lastUpdatedInterval); lastUpdatedInterval = null; return; }
+    cur.textContent = secs < 60 ? t('last_updated') : `${Math.floor(secs / 60)} min ago`;
+  }, 30000);
+}
+
+function pulseCard(participantName) {
+  const card = document.querySelector(`[data-participant="${CSS.escape(participantName)}"]`);
+  if (!card) return;
+  card.classList.add('card-pulse');
+  setTimeout(() => card.classList.remove('card-pulse'), 400);
 }
 
 async function fetchLiveScores() {
@@ -809,17 +926,18 @@ async function deletePool(id) {
 
 // ── Realtime ───────────────────────────────────────────────────────
 function cleanupRealtime() {
-  if (realtimeChannel) { db.removeChannel(realtimeChannel); realtimeChannel = null; }
-  if (elimSyncIntervalId) { clearInterval(elimSyncIntervalId); elimSyncIntervalId = null; }
+  if (realtimeChannel)     { db.removeChannel(realtimeChannel); realtimeChannel = null; }
+  if (elimSyncIntervalId)  { clearInterval(elimSyncIntervalId);  elimSyncIntervalId  = null; }
+  if (lastUpdatedInterval) { clearInterval(lastUpdatedInterval); lastUpdatedInterval = null; }
 }
 
-function subscribeToPool(poolId, onUpdate) {
+function subscribeToPool(poolId, onUpdate, onStatus) {
   cleanupRealtime();
   realtimeChannel = db.channel(`pool-${poolId}`)
     .on('postgres_changes', {
       event: 'UPDATE', schema: 'public', table: 'pools', filter: `id=eq.${poolId}`,
     }, payload => onUpdate(payload.new))
-    .subscribe();
+    .subscribe(status => { if (onStatus) onStatus(status); });
 }
 
 // ── Shared: allocation cards HTML ──────────────────────────────────
@@ -845,7 +963,7 @@ function allocationCardsHTML(pool) {
     const statusText = out === 0
       ? t('status_all_alive', alive)
       : t('status_mixed', alive, out);
-    return `<div class="alloc-card">
+    return `<div class="alloc-card" data-participant="${escHtml(p.name)}">
       <div class="alloc-card-name">
         <span class="alloc-card-name-text">${escHtml(p.name)}</span>
         <span class="alloc-card-count">${teams.length > 0 ? t('teams_count', teams.length) : '—'}</span>
@@ -1282,27 +1400,51 @@ async function renderViewer(poolId) {
   viewerActions.appendChild(shareWrap);
   shareWrap.querySelector('#share-btn').addEventListener('click', () => sharePool(pool.id, pool.title));
 
+  // Live indicator — shown only when subscription is SUBSCRIBED
+  const liveEl = document.createElement('span');
+  liveEl.id        = 'live-indicator';
+  liveEl.className = 'live-indicator';
+  liveEl.setAttribute('aria-label', 'Live updates active');
+  liveEl.style.display = 'none';
+  liveEl.innerHTML = `<span class="live-dot"></span><span>${escHtml(t('live_indicator'))}</span>`;
+  viewerActions.appendChild(liveEl);
+
   renderViewerContent(pool);
 
-  // Track last-known eliminations for non-owner realtime alerts
+  // Track last-known eliminations for pulse + non-owner alerts
   let lastKnownEliminated = new Set(pool.eliminated_teams || []);
   if (currentSession && pool.owner_id !== currentSession.user.id) {
     checkEliminationsOnLoad(pool);
   }
 
   subscribeToPool(poolId, updated => {
-    if (typeof updated.allocation       === 'string') updated.allocation       = JSON.parse(updated.allocation);
+    if (typeof updated.allocation        === 'string') updated.allocation        = JSON.parse(updated.allocation);
     if (typeof updated.eliminated_teams  === 'string') updated.eliminated_teams  = JSON.parse(updated.eliminated_teams);
-    if (typeof updated.participants      === 'string') updated.participants      = JSON.parse(updated.participants);
+    if (typeof updated.participants      === 'string') updated.participants       = JSON.parse(updated.participants);
     renderViewerContent(updated);
+    updateLastUpdatedLabel();
 
-    // Elimination alerts for non-owner saved-pool viewers
-    if (currentSession && pool.owner_id !== currentSession.user.id) {
-      const newElim  = updated.eliminated_teams || [];
-      const newly    = newElim.filter(name => !lastKnownEliminated.has(name));
-      if (newly.length) showEliminationBanner(poolId, newly);
-      lastKnownEliminated = new Set(newElim);
+    const newElim = updated.eliminated_teams || [];
+    const newly   = newElim.filter(name => !lastKnownEliminated.has(name));
+
+    if (newly.length) {
+      // Pulse cards for participants with newly-eliminated teams
+      const allocation = (typeof updated.allocation === 'object' && updated.allocation) ? updated.allocation : {};
+      for (const [participantId, teams] of Object.entries(allocation)) {
+        const participant = (updated.participants || []).find(p => p.id === participantId);
+        if (participant && (teams || []).some(tm => newly.includes(teamId(tm)))) {
+          pulseCard(participant.name);
+        }
+      }
+      // Elimination alerts for non-owner saved-pool viewers
+      if (currentSession && pool.owner_id !== currentSession.user.id) {
+        showEliminationBanner(poolId, newly);
+      }
     }
+    lastKnownEliminated = new Set(newElim);
+  }, status => {
+    const indicator = document.getElementById('live-indicator');
+    if (indicator) indicator.style.display = status === 'SUBSCRIBED' ? 'inline-flex' : 'none';
   });
 }
 
@@ -1310,6 +1452,11 @@ function renderViewerContent(pool) {
   const heroWrap = document.getElementById('pool-hero-wrap');
   const content  = document.getElementById('viewer-content');
   if (!heroWrap || !content) return;
+
+  // Preserve last-updated state across re-renders
+  const prevLastUpdated = document.getElementById('last-updated');
+  const savedLUText     = prevLastUpdated?.textContent;
+  const savedLUVisible  = prevLastUpdated?.style.display !== 'none';
 
   heroWrap.innerHTML = `
     <div class="pool-hero">
@@ -1331,7 +1478,14 @@ function renderViewerContent(pool) {
        </div>`
     : '';
 
-  content.innerHTML = lockNotice + bannerHTML + `<div class="alloc-grid">${allocationCardsHTML(pool)}</div>`;
+  content.innerHTML = lockNotice + bannerHTML
+    + `<span class="last-updated" id="last-updated" style="display:none"></span>`
+    + `<div class="alloc-grid">${allocationCardsHTML(pool)}</div>`;
+
+  if (savedLUText && savedLUVisible) {
+    const el = document.getElementById('last-updated');
+    if (el) { el.textContent = savedLUText; el.style.display = 'inline'; }
+  }
 }
 
 // ── Admin mode ─────────────────────────────────────────────────────
