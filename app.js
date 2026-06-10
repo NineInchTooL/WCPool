@@ -96,6 +96,49 @@ const EN_TO_LOCAL = {
   'Cape Verde': 'Cabo Verde',
 };
 
+// Maps Spanish canonical names → display names per locale (es-MX is identity)
+const TEAM_NAMES_I18N = {
+  'en-US': {
+    'Argentina': 'Argentina', 'Francia': 'France', 'Inglaterra': 'England',
+    'Brasil': 'Brazil', 'España': 'Spain', 'Alemania': 'Germany',
+    'Portugal': 'Portugal', 'Países Bajos': 'Netherlands', 'Bélgica': 'Belgium',
+    'Uruguay': 'Uruguay', 'Colombia': 'Colombia', 'Estados Unidos': 'USA',
+    'México': 'Mexico', 'Croacia': 'Croatia', 'Suiza': 'Switzerland',
+    'Senegal': 'Senegal', 'Japón': 'Japan', 'Marruecos': 'Morocco',
+    'Corea del Sur': 'South Korea', 'Ecuador': 'Ecuador', 'Austria': 'Austria',
+    'Turquía': 'Turkey', 'Canadá': 'Canada', 'Suecia': 'Sweden',
+    'Australia': 'Australia', 'Noruega': 'Norway', 'Paraguay': 'Paraguay',
+    'Túnez': 'Tunisia', 'Bosnia y Herzegovina': 'Bosnia & Herzegovina',
+    'Ghana': 'Ghana', 'República Checa': 'Czech Republic', 'Escocia': 'Scotland',
+    'Costa de Marfil': 'Ivory Coast', 'Argelia': 'Algeria', 'Irán': 'Iran',
+    'Egipto': 'Egypt', 'Arabia Saudita': 'Saudi Arabia', 'Sudáfrica': 'South Africa',
+    'Irak': 'Iraq', 'Jordania': 'Jordan', 'Catar': 'Qatar',
+    'Uzbekistán': 'Uzbekistan', 'Curazao': 'Curaçao', 'Haití': 'Haiti',
+    'Panamá': 'Panama', 'Nueva Zelanda': 'New Zealand',
+    'Rep. Democrática del Congo': 'DR Congo', 'Cabo Verde': 'Cape Verde',
+  },
+  'es-MX': {},
+  'pt-PT': {
+    'Argentina': 'Argentina', 'Francia': 'França', 'Inglaterra': 'Inglaterra',
+    'Brasil': 'Brasil', 'España': 'Espanha', 'Alemania': 'Alemanha',
+    'Portugal': 'Portugal', 'Países Bajos': 'Países Baixos', 'Bélgica': 'Bélgica',
+    'Uruguay': 'Uruguai', 'Colombia': 'Colômbia', 'Estados Unidos': 'EUA',
+    'México': 'México', 'Croacia': 'Croácia', 'Suiza': 'Suíça',
+    'Senegal': 'Senegal', 'Japón': 'Japão', 'Marruecos': 'Marrocos',
+    'Corea del Sur': 'Coreia do Sul', 'Ecuador': 'Equador', 'Austria': 'Áustria',
+    'Turquía': 'Turquia', 'Canadá': 'Canadá', 'Suecia': 'Suécia',
+    'Australia': 'Austrália', 'Noruega': 'Noruega', 'Paraguay': 'Paraguai',
+    'Túnez': 'Tunísia', 'Bosnia y Herzegovina': 'Bósnia e Herzegovina',
+    'Ghana': 'Gana', 'República Checa': 'República Checa', 'Escocia': 'Escócia',
+    'Costa de Marfil': 'Costa do Marfim', 'Argelia': 'Argélia', 'Irán': 'Irão',
+    'Egipto': 'Egito', 'Arabia Saudita': 'Arábia Saudita', 'Sudáfrica': 'África do Sul',
+    'Irak': 'Iraque', 'Jordania': 'Jordânia', 'Catar': 'Qatar',
+    'Uzbekistán': 'Uzbequistão', 'Curazao': 'Curaçao', 'Haití': 'Haiti',
+    'Panamá': 'Panamá', 'Nueva Zelanda': 'Nova Zelândia',
+    'Rep. Democrática del Congo': 'RD Congo', 'Cabo Verde': 'Cabo Verde',
+  },
+};
+
 // ── Supabase (use `db` — window.supabase is non-configurable) ──────
 const db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
@@ -104,6 +147,357 @@ let currentSession = null;
 let realtimeChannel = null;
 let currentSuggestions = [];
 let elimSyncIntervalId = null;
+
+// ── i18n ───────────────────────────────────────────────────────────
+// Rules: TEAMS[].name is always Spanish (es-MX) — canonical DB key.
+//        localTeamName(nameEs) translates for display only.
+//        t(key, ...args) handles plain strings and function-valued entries.
+//        setLocale() persists to localStorage and re-renders via router().
+
+const TRANSLATIONS = {
+  'en-US': {
+    // Landing
+    landing_subtitle:          'Create and manage your World Cup 2026 pool',
+    sign_in_google:            'Sign in with Google',
+    // Header / nav
+    my_pools_back:             'My Pools',
+    view:                      '👁 View',
+    admin:                     '⚙ Admin',
+    // Dashboard
+    sign_out:                  'Sign out',
+    my_pools:                  'My Pools',
+    create_new_pool:           '＋ Create New Pool',
+    loading_pools:             'Loading pools…',
+    new_pool_title:            'New Pool',
+    pool_title_label:          'Pool title',
+    default_pool_title:        'My WC2026 Pool',
+    participants_label:        'Participants',
+    team_set_label:            'Team set',
+    team_set_value:            'FIFA World Cup 2026 — 48 teams, 4 tiers',
+    cancel:                    'Cancel',
+    create_pool:               'Create Pool',
+    creating:                  'Creating…',
+    delete_pool_modal_title:   'Delete pool?',
+    delete_permanently:        'Delete permanently',
+    failed_load_pools:         'Failed to load pools. Please refresh.',
+    failed_create_pool:        'Failed to create pool. Try again.',
+    failed_delete:             'Failed to delete. Try again.',
+    please_enter_title:        'Please enter a pool title.',
+    player_count_helper:       (n, lo, hi) => `With ${n} players, each gets ${lo === hi ? lo : `${lo}–${hi}`} teams`,
+    delete_pool_confirm:       title => `This will permanently delete <strong>${escHtml(title)}</strong> and all its data.`,
+    // Pool grid
+    no_pools_title:            'No pools yet',
+    no_pools_desc:             'Create your first pool to get started!',
+    pool_limit_msg:            "You've reached the 10 pool limit.",
+    // Pool card
+    badge_allocated:           '✅ Allocated',
+    badge_locked:              '🔒 Locked',
+    players:                   n => `${n} players`,
+    // Viewer
+    pool_not_found:            'Pool not found',
+    go_home:                   '← Go home',
+    allocation_locked:         '🔒 Allocation locked',
+    teams_still_in:            n => `⚽ <strong>${n}</strong> teams still in`,
+    teams_eliminated:          n => `❌ <strong>${n}</strong> eliminated`,
+    // Admin
+    access_denied:             'Access denied',
+    not_owner:                 'You are not the owner of this pool.',
+    pool_not_found_error:      'Pool not found.',
+    admin_panel_label:         'Admin Panel',
+    change:                    '· change',
+    save:                      'Save',
+    share_viewer_link:         '📋 Share viewer link',
+    copy_whatsapp:             '📋 Copy for WhatsApp',
+    // Participants
+    participants:              'Participants',
+    name_placeholder:          'Name',
+    extra_team:                'Extra team',
+    add:                       'Add',
+    extra_team_hint:           'Mark "Extra team" to flag a participant as priority for an extra team when totals don\'t divide evenly.',
+    participant_over_limit:    (n, max) => `⚠️ ${n} / ${max} — please remove ${n - max} participant(s)`,
+    participant_count:         (n, max) => `${n} / ${max} participants added`,
+    must_be_2_12:              'Must be 2–12.',
+    save_failed:               'Save failed.',
+    failed_add_participant:    'Failed to add participant.',
+    failed_remove_participant: 'Failed to remove participant.',
+    extra_badge:               '+extra',
+    extra_inline:              'Extra',
+    // Allocation
+    elimination_tracker:       '⚽ Elimination Tracker',
+    allocation_heading:        'Allocation',
+    allocate_teams:            '🎲 Allocate Teams',
+    unlock_allocation:         '🔓 Unlock Allocation',
+    lock_allocation:           '🔒 Lock Allocation',
+    clear:                     'Clear',
+    allocation_is_locked:      '🔒 Allocation is locked.',
+    allocation_assigned:       'Allocation assigned.',
+    no_allocation_yet:         'No allocation yet.',
+    allocation_unlocked:       'Allocation unlocked.',
+    whatsapp_export:           'WhatsApp Export',
+    copy_to_clipboard:         '📋 Copy to clipboard',
+    danger_zone:               'Danger Zone',
+    delete_this_pool:          '🗑 Delete this pool',
+    admin_delete_confirm:      title => `This will permanently delete <strong>${escHtml(title)}</strong> and all its data.`,
+    // Elim tracker
+    tier_1:                    '⭐ Tier 1 — Favorites',
+    tier_2:                    '🔵 Tier 2 — Contenders',
+    tier_3:                    '🟢 Tier 3 — Underdogs',
+    tier_4:                    '⚪ Tier 4 — Wildcards',
+    sync_scores:               '🔄 Sync Scores',
+    syncing:                   'Syncing…',
+    suggested_eliminations:    '📊 Suggested eliminations based on live scores:',
+    could_not_fetch:           'Could not fetch scores',
+    // Alloc cards
+    no_alloc_hint:             'No allocation yet.',
+    teams_count:               n => `${n} teams`,
+    status_all_alive:          n => `✅ ${n} alive`,
+    status_mixed:              (a, e) => `✅ ${a} alive · ❌ ${e} eliminated`,
+    // Confirms / errors
+    confirm_realloc:           'This will re-randomize the current allocation. Are you sure?',
+    confirm_unlock:            'Unlock the allocation?',
+    confirm_clear:             'Clear the current allocation?',
+    failed_save_allocation:    'Failed to save allocation.',
+    failed_save:               'Failed to save.',
+    failed_clear_allocation:   'Failed to clear allocation.',
+    failed_delete_pool:        'Failed to delete pool.',
+    failed_update:             'Failed to update.',
+    copied:                    '✅ Copied!',
+  },
+  'es-MX': {
+    landing_subtitle:          'Crea y gestiona tu quiniela del Mundial 2026',
+    sign_in_google:            'Iniciar sesión con Google',
+    my_pools_back:             'Mis Quinielas',
+    view:                      '👁 Ver',
+    admin:                     '⚙ Admin',
+    sign_out:                  'Cerrar sesión',
+    my_pools:                  'Mis Quinielas',
+    create_new_pool:           '＋ Nueva Quiniela',
+    loading_pools:             'Cargando quinielas…',
+    new_pool_title:            'Nueva Quiniela',
+    pool_title_label:          'Nombre',
+    default_pool_title:        'Mi Quiniela WC2026',
+    participants_label:        'Participantes',
+    team_set_label:            'Set de equipos',
+    team_set_value:            'Copa Mundial FIFA 2026 — 48 equipos, 4 categorías',
+    cancel:                    'Cancelar',
+    create_pool:               'Crear Quiniela',
+    creating:                  'Creando…',
+    delete_pool_modal_title:   '¿Eliminar quiniela?',
+    delete_permanently:        'Eliminar permanentemente',
+    failed_load_pools:         'Error al cargar las quinielas. Recarga la página.',
+    failed_create_pool:        'Error al crear la quiniela. Inténtalo de nuevo.',
+    failed_delete:             'Error al eliminar. Inténtalo de nuevo.',
+    please_enter_title:        'Por favor escribe un nombre para la quiniela.',
+    player_count_helper:       (n, lo, hi) => `Con ${n} jugadores, cada uno recibe ${lo === hi ? lo : `${lo}–${hi}`} equipos`,
+    delete_pool_confirm:       title => `Esto eliminará permanentemente <strong>${escHtml(title)}</strong> y todos sus datos.`,
+    no_pools_title:            'Sin quinielas',
+    no_pools_desc:             '¡Crea tu primera quiniela para comenzar!',
+    pool_limit_msg:            'Alcanzaste el límite de 10 quinielas.',
+    badge_allocated:           '✅ Asignada',
+    badge_locked:              '🔒 Bloqueada',
+    players:                   n => `${n} jugadores`,
+    pool_not_found:            'Quiniela no encontrada',
+    go_home:                   '← Inicio',
+    allocation_locked:         '🔒 Asignación bloqueada',
+    teams_still_in:            n => `⚽ <strong>${n}</strong> equipos en competencia`,
+    teams_eliminated:          n => `❌ <strong>${n}</strong> eliminados`,
+    access_denied:             'Acceso denegado',
+    not_owner:                 'No eres el dueño de esta quiniela.',
+    pool_not_found_error:      'Quiniela no encontrada.',
+    admin_panel_label:         'Panel de Admin',
+    change:                    '· cambiar',
+    save:                      'Guardar',
+    share_viewer_link:         '📋 Compartir enlace',
+    copy_whatsapp:             '📋 Copiar para WhatsApp',
+    participants:              'Participantes',
+    name_placeholder:          'Nombre',
+    extra_team:                'Equipo extra',
+    add:                       'Agregar',
+    extra_team_hint:           'Marca "Equipo extra" para priorizar a un participante cuando los totales no dividan de forma exacta.',
+    participant_over_limit:    (n, max) => `⚠️ ${n} / ${max} — elimina ${n - max} participante(s)`,
+    participant_count:         (n, max) => `${n} / ${max} participantes agregados`,
+    must_be_2_12:              'Debe ser entre 2 y 12.',
+    save_failed:               'Error al guardar.',
+    failed_add_participant:    'Error al agregar participante.',
+    failed_remove_participant: 'Error al eliminar participante.',
+    extra_badge:               '+extra',
+    extra_inline:              'Extra',
+    elimination_tracker:       '⚽ Rastreador de Eliminaciones',
+    allocation_heading:        'Asignación',
+    allocate_teams:            '🎲 Asignar Equipos',
+    unlock_allocation:         '🔓 Desbloquear Asignación',
+    lock_allocation:           '🔒 Bloquear Asignación',
+    clear:                     'Limpiar',
+    allocation_is_locked:      '🔒 La asignación está bloqueada.',
+    allocation_assigned:       'Asignación realizada.',
+    no_allocation_yet:         'Sin asignación todavía.',
+    allocation_unlocked:       'Asignación desbloqueada.',
+    whatsapp_export:           'Exportar a WhatsApp',
+    copy_to_clipboard:         '📋 Copiar al portapapeles',
+    danger_zone:               'Zona de Peligro',
+    delete_this_pool:          '🗑 Eliminar esta quiniela',
+    admin_delete_confirm:      title => `Esto eliminará permanentemente <strong>${escHtml(title)}</strong> y todos sus datos.`,
+    tier_1:                    '⭐ Tier 1 — Favoritos',
+    tier_2:                    '🔵 Tier 2 — Contendientes',
+    tier_3:                    '🟢 Tier 3 — Intermedios',
+    tier_4:                    '⚪ Tier 4 — Sorpresas',
+    sync_scores:               '🔄 Sincronizar Marcadores',
+    syncing:                   'Sincronizando…',
+    suggested_eliminations:    '📊 Eliminaciones sugeridas según marcadores en vivo:',
+    could_not_fetch:           'No se pudieron obtener los marcadores',
+    no_alloc_hint:             'Sin asignación todavía.',
+    teams_count:               n => `${n} equipos`,
+    status_all_alive:          n => `✅ ${n} vivos`,
+    status_mixed:              (a, e) => `✅ ${a} vivos · ❌ ${e} eliminados`,
+    confirm_realloc:           '¿Reasignar equipos aleatoriamente? Se reemplazará la asignación actual.',
+    confirm_unlock:            '¿Desbloquear la asignación?',
+    confirm_clear:             '¿Limpiar la asignación actual?',
+    failed_save_allocation:    'Error al guardar la asignación.',
+    failed_save:               'Error al guardar.',
+    failed_clear_allocation:   'Error al limpiar la asignación.',
+    failed_delete_pool:        'Error al eliminar la quiniela.',
+    failed_update:             'Error al actualizar.',
+    copied:                    '✅ ¡Copiado!',
+  },
+  'pt-PT': {
+    landing_subtitle:          'Crie e gerencie o seu bolão da Copa do Mundo 2026',
+    sign_in_google:            'Entrar com Google',
+    my_pools_back:             'Meus Bolões',
+    view:                      '👁 Ver',
+    admin:                     '⚙ Admin',
+    sign_out:                  'Sair',
+    my_pools:                  'Meus Bolões',
+    create_new_pool:           '＋ Criar Novo Bolão',
+    loading_pools:             'Carregando bolões…',
+    new_pool_title:            'Novo Bolão',
+    pool_title_label:          'Nome do bolão',
+    default_pool_title:        'Meu Bolão WC2026',
+    participants_label:        'Participantes',
+    team_set_label:            'Conjunto de seleções',
+    team_set_value:            'Copa do Mundo FIFA 2026 — 48 seleções, 4 níveis',
+    cancel:                    'Cancelar',
+    create_pool:               'Criar Bolão',
+    creating:                  'Criando…',
+    delete_pool_modal_title:   'Eliminar bolão?',
+    delete_permanently:        'Eliminar permanentemente',
+    failed_load_pools:         'Falha ao carregar bolões. Por favor recarregue.',
+    failed_create_pool:        'Falha ao criar bolão. Tente novamente.',
+    failed_delete:             'Falha ao eliminar. Tente novamente.',
+    please_enter_title:        'Por favor insira um nome para o bolão.',
+    player_count_helper:       (n, lo, hi) => `Com ${n} jogadores, cada um recebe ${lo === hi ? lo : `${lo}–${hi}`} seleções`,
+    delete_pool_confirm:       title => `Isto vai eliminar permanentemente <strong>${escHtml(title)}</strong> e todos os seus dados.`,
+    no_pools_title:            'Sem bolões',
+    no_pools_desc:             'Crie o seu primeiro bolão para começar!',
+    pool_limit_msg:            'Atingiu o limite de 10 bolões.',
+    badge_allocated:           '✅ Alocado',
+    badge_locked:              '🔒 Bloqueado',
+    players:                   n => `${n} jogadores`,
+    pool_not_found:            'Bolão não encontrado',
+    go_home:                   '← Início',
+    allocation_locked:         '🔒 Alocação bloqueada',
+    teams_still_in:            n => `⚽ <strong>${n}</strong> seleções em campo`,
+    teams_eliminated:          n => `❌ <strong>${n}</strong> eliminadas`,
+    access_denied:             'Acesso negado',
+    not_owner:                 'Você não é o dono deste bolão.',
+    pool_not_found_error:      'Bolão não encontrado.',
+    admin_panel_label:         'Painel de Admin',
+    change:                    '· alterar',
+    save:                      'Guardar',
+    share_viewer_link:         '📋 Partilhar link',
+    copy_whatsapp:             '📋 Copiar para WhatsApp',
+    participants:              'Participantes',
+    name_placeholder:          'Nome',
+    extra_team:                'Seleção extra',
+    add:                       'Adicionar',
+    extra_team_hint:           'Marque "Seleção extra" para dar prioridade a um participante na distribuição quando o total não divide igualmente.',
+    participant_over_limit:    (n, max) => `⚠️ ${n} / ${max} — remova ${n - max} participante(s)`,
+    participant_count:         (n, max) => `${n} / ${max} participantes adicionados`,
+    must_be_2_12:              'Deve ser entre 2 e 12.',
+    save_failed:               'Falha ao guardar.',
+    failed_add_participant:    'Falha ao adicionar participante.',
+    failed_remove_participant: 'Falha ao remover participante.',
+    extra_badge:               '+extra',
+    extra_inline:              'Extra',
+    elimination_tracker:       '⚽ Rastreador de Eliminações',
+    allocation_heading:        'Alocação',
+    allocate_teams:            '🎲 Alocar Seleções',
+    unlock_allocation:         '🔓 Desbloquear Alocação',
+    lock_allocation:           '🔒 Bloquear Alocação',
+    clear:                     'Limpar',
+    allocation_is_locked:      '🔒 Alocação bloqueada.',
+    allocation_assigned:       'Alocação realizada.',
+    no_allocation_yet:         'Sem alocação ainda.',
+    allocation_unlocked:       'Alocação desbloqueada.',
+    whatsapp_export:           'Exportar para WhatsApp',
+    copy_to_clipboard:         '📋 Copiar para área de transferência',
+    danger_zone:               'Zona de Perigo',
+    delete_this_pool:          '🗑 Eliminar este bolão',
+    admin_delete_confirm:      title => `Isto vai eliminar permanentemente <strong>${escHtml(title)}</strong> e todos os seus dados.`,
+    tier_1:                    '⭐ Nível 1 — Favoritos',
+    tier_2:                    '🔵 Nível 2 — Candidatos',
+    tier_3:                    '🟢 Nível 3 — Intermediários',
+    tier_4:                    '⚪ Nível 4 — Surpresas',
+    sync_scores:               '🔄 Sincronizar Resultados',
+    syncing:                   'Sincronizando…',
+    suggested_eliminations:    '📊 Eliminações sugeridas com base em resultados em tempo real:',
+    could_not_fetch:           'Não foi possível obter os resultados',
+    no_alloc_hint:             'Sem alocação ainda.',
+    teams_count:               n => `${n} seleções`,
+    status_all_alive:          n => `✅ ${n} em campo`,
+    status_mixed:              (a, e) => `✅ ${a} em campo · ❌ ${e} eliminadas`,
+    confirm_realloc:           'Isto vai re-randomizar a alocação atual. Tem a certeza?',
+    confirm_unlock:            'Desbloquear a alocação?',
+    confirm_clear:             'Limpar a alocação atual?',
+    failed_save_allocation:    'Falha ao guardar a alocação.',
+    failed_save:               'Falha ao guardar.',
+    failed_clear_allocation:   'Falha ao limpar a alocação.',
+    failed_delete_pool:        'Falha ao eliminar o bolão.',
+    failed_update:             'Falha ao atualizar.',
+    copied:                    '✅ Copiado!',
+  },
+};
+
+const LOCALES = ['en-US', 'es-MX', 'pt-PT'];
+const LOCALE_LABELS = { 'en-US': 'EN', 'es-MX': 'ES', 'pt-PT': 'PT' };
+
+let currentLocale = (() => {
+  const saved = localStorage.getItem('wcpool_locale');
+  if (saved && LOCALES.includes(saved)) return saved;
+  const lang = navigator.language || '';
+  if (lang.startsWith('pt')) return 'pt-PT';
+  if (lang.startsWith('es')) return 'es-MX';
+  return 'en-US';
+})();
+
+function t(key, ...args) {
+  const val = TRANSLATIONS[currentLocale]?.[key] ?? TRANSLATIONS['en-US']?.[key];
+  return typeof val === 'function' ? val(...args) : (val ?? key);
+}
+
+function setLocale(locale) {
+  if (!LOCALES.includes(locale)) return;
+  currentLocale = locale;
+  localStorage.setItem('wcpool_locale', locale);
+  document.documentElement.lang = locale;
+  router();
+}
+
+function localTeamName(nameEs) {
+  const map = TEAM_NAMES_I18N[currentLocale];
+  return (map && map[nameEs]) ? map[nameEs] : nameEs;
+}
+
+function localeSwitcherHTML() {
+  return `<div class="locale-switcher">${LOCALES.map(l =>
+    `<button class="locale-btn${l === currentLocale ? ' active' : ''}" data-locale="${l}">${LOCALE_LABELS[l]}</button>`
+  ).join('')}</div>`;
+}
+
+function bindLocaleSwitcher(container) {
+  container.querySelectorAll('.locale-btn').forEach(btn => {
+    btn.addEventListener('click', () => setLocale(btn.dataset.locale));
+  });
+}
 
 // ── Theme ──────────────────────────────────────────────────────────
 (function initTheme() {
@@ -154,7 +548,7 @@ async function copyToClipboard(text, btn) {
   try {
     await navigator.clipboard.writeText(text);
     const orig = btn.textContent;
-    btn.textContent = '✅ Copied!';
+    btn.textContent = t('copied');
     setTimeout(() => { btn.textContent = orig; }, 2000);
   } catch { /* silent */ }
 }
@@ -174,21 +568,19 @@ function allocate(participants) {
   // Algorithm is only correct for N ≤ 12; clamp defensively (UI should prevent N > 12)
   if (participants.length > 12) participants = participants.slice(0, 12);
   const N = participants.length;
-  const tierBase       = Math.floor(12 / N);       // per-tier base rounds
-  const globalBase     = Math.floor(48 / N);        // total guaranteed per player
-  const extras         = 48 % N;                    // players who get one extra
-  const extraBaseRounds = globalBase - 4 * tierBase; // full cross-tier rounds after tier base
+  const tierBase        = Math.floor(12 / N);
+  const globalBase      = Math.floor(48 / N);
+  const extras          = 48 % N;
+  const extraBaseRounds = globalBase - 4 * tierBase;
 
   const result = {};
   for (const p of participants) result[p.id] = [];
 
-  // Pre-shuffle each tier pool once
   const tierPools = {};
   for (let tier = 1; tier <= 4; tier++) {
     tierPools[tier] = shuffle(TEAMS.filter(t => t.tier === tier));
   }
 
-  // Tier base rounds: give each player tierBase teams from every tier
   const baseOrder = shuffle(participants.map(p => p.id));
   for (let tier = 1; tier <= 4; tier++) {
     const pool = tierPools[tier];
@@ -198,22 +590,19 @@ function allocate(participants) {
     }
   }
 
-  // Collect leftover teams (not used in tier base rounds) into one shuffled pool
   const leftover = [];
   for (let tier = 1; tier <= 4; tier++) {
     for (let i = tierBase * N; i < 12; i++) leftover.push(tierPools[tier][i]);
   }
-  shuffle(leftover); // leftover.length === extraBaseRounds*N + extras (exact)
+  shuffle(leftover);
 
   let li = 0;
 
-  // Extra base rounds: give 1 leftover team to every player per round
   const extraOrder = shuffle(participants.map(p => p.id));
   for (let round = 0; round < extraBaseRounds; round++) {
     for (const pid of extraOrder) result[pid].push(leftover[li++]);
   }
 
-  // Final partial round: 1 more team each to exactly `extras` players
   if (extras > 0) {
     const extraIds = shuffle(participants.map(p => p.id)).slice(0, extras);
     for (const pid of extraIds) result[pid].push(leftover[li++]);
@@ -238,8 +627,8 @@ function buildExportText(pool) {
       .map(tier => byTier[tier][0] ? `${TIER_ICON[tier]} ${byTier[tier][0]}` : null)
       .filter(Boolean).join(' · ');
     if (mainLine) lines.push(mainLine);
-    const extras = TIERS.flatMap(tier => byTier[tier].slice(1).map(t => `${TIER_ICON[tier]} ${t}`));
-    if (extras.length) lines.push(extras.join(' · '));
+    const extrasLine = TIERS.flatMap(tier => byTier[tier].slice(1).map(t => `${TIER_ICON[tier]} ${t}`));
+    if (extrasLine.length) lines.push(extrasLine.join(' · '));
     lines.push(sep);
   }
   return lines.join('\n');
@@ -339,7 +728,7 @@ function subscribeToPool(poolId, onUpdate) {
 // ── Shared: allocation cards HTML ──────────────────────────────────
 function allocationCardsHTML(pool) {
   if (!pool.allocation || !(pool.participants || []).length) {
-    return '<p class="hint center" style="padding:24px 0">Sin asignación todavía.</p>';
+    return `<p class="hint center" style="padding:24px 0">${t('no_alloc_hint')}</p>`;
   }
   const eliminated = pool.eliminated_teams || [];
   return (pool.participants || []).map(p => {
@@ -353,16 +742,16 @@ function allocationCardsHTML(pool) {
       const isElim = eliminated.includes(teamId(t));
       return `<li class="${isElim ? 'team-eliminated' : ''}">
         <span class="tier-dot tier-${t.tier}"></span>
-        ${isElim ? '❌ ' : '✅ '}${escHtml(t.flag)} ${escHtml(t.name)}
+        ${isElim ? '❌ ' : '✅ '}${escHtml(t.flag)} ${escHtml(localTeamName(t.name))}
       </li>`;
     }).join('');
     const statusText = out === 0
-      ? `✅ ${alive} vivos`
-      : `✅ ${alive} vivos · ❌ ${out} eliminados`;
+      ? t('status_all_alive', alive)
+      : t('status_mixed', alive, out);
     return `<div class="alloc-card">
       <div class="alloc-card-name">
         <span class="alloc-card-name-text">${escHtml(p.name)}</span>
-        <span class="alloc-card-count">${teams.length > 0 ? `${teams.length} equipos` : '—'}</span>
+        <span class="alloc-card-count">${teams.length > 0 ? t('teams_count', teams.length) : '—'}</span>
       </div>
       <span class="alloc-status">${statusText}</span>
       <ul class="team-list">${teamsHtml}</ul>
@@ -399,20 +788,24 @@ function renderLanding() {
     <div class="landing-page">
       <header class="landing-header">
         <span class="logo">${LOGO_MARK}<span class="logo-text">WCPool</span></span>
-        <button class="theme-toggle" title="Toggle theme">${themeIcon()}</button>
+        <div class="header-right">
+          ${localeSwitcherHTML()}
+          <button class="theme-toggle" title="Toggle theme">${themeIcon()}</button>
+        </div>
       </header>
       <main class="landing-main">
         <div class="landing-card">
           <div class="landing-icon"><svg width="56" height="56" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M14 2L25.26 8.5V21.5L14 28L2.74 21.5V8.5L14 2Z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/><path d="M8 10L10.5 18L14 13L17.5 18L20 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></div>
           <h1 class="landing-title">WCPool</h1>
-          <p class="landing-subtitle">Create and manage your World Cup 2026 pool</p>
+          <p class="landing-subtitle">${t('landing_subtitle')}</p>
           <div class="landing-divider"></div>
-          <button class="btn-google" id="landing-sign-in">${GOOGLE_ICON} Sign in with Google</button>
+          <button class="btn-google" id="landing-sign-in">${GOOGLE_ICON} ${t('sign_in_google')}</button>
         </div>
       </main>
       <footer class="landing-footer">by NineInchTooL</footer>
     </div>
   `;
+  bindLocaleSwitcher(document.getElementById('app'));
   document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
   document.getElementById('landing-sign-in').addEventListener('click', signInWithGoogle);
 }
@@ -434,40 +827,41 @@ async function renderDashboard() {
           ${avatar ? `<img class="user-avatar" src="${escHtml(avatar)}" alt="" />` : ''}
           <span class="user-name">${escHtml(name)}</span>
         </div>
-        <button class="btn btn-sm btn-ghost" id="sign-out-btn">Sign out</button>
+        <button class="btn btn-sm btn-ghost" id="sign-out-btn">${t('sign_out')}</button>
+        ${localeSwitcherHTML()}
         <button class="theme-toggle" title="Toggle theme">${themeIcon()}</button>
       </div>
     </header>
     <main class="main-content">
       <div class="page-heading">
-        <h1>My Pools <span class="count-badge" id="pool-count-badge">…</span></h1>
-        <button class="btn btn-primary" id="create-pool-btn">＋ Create New Pool</button>
+        <h1>${t('my_pools')} <span class="count-badge" id="pool-count-badge">…</span></h1>
+        <button class="btn btn-primary" id="create-pool-btn">${t('create_new_pool')}</button>
       </div>
-      <div id="dashboard-content"><span class="loading-spinner-sm"></span> Loading pools…</div>
+      <div id="dashboard-content"><span class="loading-spinner-sm"></span> ${t('loading_pools')}</div>
     </main>
     <footer class="site-footer">by NineInchTooL</footer>
 
     <!-- Create pool modal -->
     <div id="create-modal" class="modal hidden">
       <div class="modal-box">
-        <h2 class="modal-title">New Pool</h2>
-        <label class="field">Pool title
-          <input type="text" id="new-title" value="My WC2026 Pool" />
+        <h2 class="modal-title">${t('new_pool_title')}</h2>
+        <label class="field">${t('pool_title_label')}
+          <input type="text" id="new-title" value="${escHtml(t('default_pool_title'))}" />
         </label>
-        <label class="field">Participants
+        <label class="field">${t('participants_label')}
           <div class="modal-range-row">
             <input type="range" id="new-count" min="2" max="12" value="10" />
             <span class="modal-range-val" id="new-count-val">10</span>
           </div>
-          <span class="count-helper" id="count-helper">With 10 players, each gets 4–5 teams</span>
+          <span class="count-helper" id="count-helper">${t('player_count_helper', 10, 4, 5)}</span>
         </label>
-        <label class="field">Team set
-          <input type="text" value="FIFA World Cup 2026 — 48 teams, 4 tiers" readonly />
+        <label class="field">${t('team_set_label')}
+          <input type="text" value="${escHtml(t('team_set_value'))}" readonly />
         </label>
         <p class="error-msg hidden" id="create-error"></p>
         <div class="modal-actions">
-          <button class="btn" id="create-cancel">Cancel</button>
-          <button class="btn btn-primary" id="create-submit">Create Pool</button>
+          <button class="btn" id="create-cancel">${t('cancel')}</button>
+          <button class="btn btn-primary" id="create-submit">${t('create_pool')}</button>
         </div>
       </div>
     </div>
@@ -475,17 +869,18 @@ async function renderDashboard() {
     <!-- Delete confirm modal -->
     <div id="delete-modal" class="modal hidden">
       <div class="modal-box">
-        <h2 class="modal-title">Delete pool?</h2>
+        <h2 class="modal-title">${t('delete_pool_modal_title')}</h2>
         <p id="delete-modal-text" style="color:var(--color-text-muted);font-size:.9rem"></p>
         <p class="error-msg hidden" id="delete-modal-err"></p>
         <div class="modal-actions">
-          <button class="btn" id="delete-cancel">Cancel</button>
-          <button class="btn btn-danger" id="delete-confirm">Delete permanently</button>
+          <button class="btn" id="delete-cancel">${t('cancel')}</button>
+          <button class="btn btn-danger" id="delete-confirm">${t('delete_permanently')}</button>
         </div>
       </div>
     </div>
   `;
 
+  bindLocaleSwitcher(document.getElementById('app'));
   document.getElementById('sign-out-btn').addEventListener('click', async () => { await db.auth.signOut(); });
   document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
 
@@ -494,7 +889,7 @@ async function renderDashboard() {
     pools = await fetchUserPools();
   } catch {
     document.getElementById('dashboard-content').innerHTML =
-      '<p class="error-msg">Failed to load pools. Please refresh.</p>';
+      `<p class="error-msg">${t('failed_load_pools')}</p>`;
     document.getElementById('pool-count-badge').textContent = '—';
     return;
   }
@@ -517,29 +912,29 @@ function renderPoolGrid(pools) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">🏆</div>
-        <p class="empty-state-title">No pools yet</p>
-        <p class="empty-state-desc">Create your first pool to get started!</p>
+        <p class="empty-state-title">${t('no_pools_title')}</p>
+        <p class="empty-state-desc">${t('no_pools_desc')}</p>
       </div>`;
     return;
   }
 
   container.innerHTML = `<div class="pool-grid">${pools.map(poolCardHTML).join('')}</div>
-    ${pools.length >= MAX ? '<p class="limit-msg">You\'ve reached the 10 pool limit.</p>' : ''}`;
+    ${pools.length >= MAX ? `<p class="limit-msg">${t('pool_limit_msg')}</p>` : ''}`;
 }
 
 function poolCardHTML(pool) {
   const badges = [
-    pool.allocation        ? '<span class="badge badge-success">✅ Allocated</span>' : '',
-    pool.allocation_locked ? '<span class="badge badge-warning">🔒 Locked</span>'   : '',
+    pool.allocation        ? `<span class="badge badge-success">${t('badge_allocated')}</span>` : '',
+    pool.allocation_locked ? `<span class="badge badge-warning">${t('badge_locked')}</span>`   : '',
   ].filter(Boolean).join('');
 
   return `<div class="pool-card" data-id="${escHtml(pool.id)}">
     <div class="pool-card-title">${escHtml(pool.title)}</div>
-    <div class="pool-card-meta">${(pool.participants || []).length} / ${pool.participant_count} players</div>
+    <div class="pool-card-meta">${t('players', (pool.participants || []).length)} / ${pool.participant_count}</div>
     <div class="pool-card-badges">${badges}</div>
     <div class="pool-card-actions">
-      <a href="#/pool/${pool.id}" class="btn btn-sm">👁 View</a>
-      <a href="#/pool/${pool.id}/admin" class="btn btn-sm btn-primary">⚙ Admin</a>
+      <a href="#/pool/${pool.id}" class="btn btn-sm">${t('view')}</a>
+      <a href="#/pool/${pool.id}/admin" class="btn btn-sm btn-primary">${t('admin')}</a>
       <span class="spacer"></span>
       <button class="btn-icon delete-pool-btn" data-id="${escHtml(pool.id)}" data-title="${escHtml(pool.title)}" title="Delete pool">🗑</button>
     </div>
@@ -555,7 +950,7 @@ function bindDashboardModals(pools) {
 
   function updateHelper(n) {
     const lo = Math.floor(48 / n), hi = Math.ceil(48 / n);
-    helper.textContent = `With ${n} players, each gets ${lo === hi ? lo : `${lo}–${hi}`} teams`;
+    helper.textContent = t('player_count_helper', n, lo, hi);
   }
 
   document.getElementById('create-pool-btn').addEventListener('click', () => {
@@ -575,17 +970,17 @@ function bindDashboardModals(pools) {
     const title = document.getElementById('new-title').value.trim();
     const count = +countEl.value;
     errEl.classList.add('hidden');
-    if (!title) { errEl.textContent = 'Please enter a pool title.'; errEl.classList.remove('hidden'); return; }
+    if (!title) { errEl.textContent = t('please_enter_title'); errEl.classList.remove('hidden'); return; }
     const btn = document.getElementById('create-submit');
-    btn.disabled = true; btn.innerHTML = '<span class="loading-spinner-sm"></span> Creating…';
+    btn.disabled = true; btn.innerHTML = `<span class="loading-spinner-sm"></span> ${t('creating')}`;
     try {
       const id = await createPool(title, count);
       modal.classList.add('hidden');
       navigate(`#/pool/${id}/admin`);
     } catch {
-      errEl.textContent = 'Failed to create pool. Try again.';
+      errEl.textContent = t('failed_create_pool');
       errEl.classList.remove('hidden');
-      btn.disabled = false; btn.textContent = 'Create Pool';
+      btn.disabled = false; btn.textContent = t('create_pool');
     }
   };
 
@@ -597,8 +992,8 @@ function bindDashboardModals(pools) {
     const btn = e.target.closest('.delete-pool-btn');
     if (!btn) return;
     pendingDeleteId = btn.dataset.id;
-    document.getElementById('delete-modal-text').textContent =
-      `This will permanently delete "${btn.dataset.title}" and all its data.`;
+    document.getElementById('delete-modal-text').innerHTML =
+      t('delete_pool_confirm', btn.dataset.title);
     document.getElementById('delete-modal-err').classList.add('hidden');
     delModal.classList.remove('hidden');
   });
@@ -613,7 +1008,7 @@ function bindDashboardModals(pools) {
       delModal.classList.add('hidden');
       await renderDashboard();
     } catch {
-      errEl2.textContent = 'Failed to delete. Try again.';
+      errEl2.textContent = t('failed_delete');
       errEl2.classList.remove('hidden');
     }
   };
@@ -626,12 +1021,13 @@ async function renderViewer(poolId) {
   document.getElementById('app').innerHTML = `
     <header class="site-header">
       <div class="header-left">
-        <a href="#/" class="header-back">← <span class="header-back-text">My Pools</span></a>
+        <a href="#/" class="header-back">← <span class="header-back-text">${t('my_pools_back')}</span></a>
       </div>
       <div class="header-center">
         <span class="byline">by NineInchTooL</span>
       </div>
       <div class="header-right" id="viewer-header-right">
+        ${localeSwitcherHTML()}
         <button class="theme-toggle" title="Toggle theme">${themeIcon()}</button>
       </div>
     </header>
@@ -641,6 +1037,7 @@ async function renderViewer(poolId) {
     </div>
     <footer class="site-footer">by NineInchTooL</footer>
   `;
+  bindLocaleSwitcher(document.getElementById('app'));
   document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
 
   const pool = await fetchPool(poolId);
@@ -649,8 +1046,8 @@ async function renderViewer(poolId) {
     document.getElementById('viewer-content').innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">🤷</div>
-        <p class="empty-state-title">Pool not found</p>
-        <a href="#/" class="btn btn-sm" style="margin-top:8px">← Go home</a>
+        <p class="empty-state-title">${t('pool_not_found')}</p>
+        <a href="#/" class="btn btn-sm" style="margin-top:8px">${t('go_home')}</a>
       </div>`;
     return;
   }
@@ -658,7 +1055,7 @@ async function renderViewer(poolId) {
   // Add admin button if current user is owner
   if (currentSession && pool.owner_id === currentSession.user.id) {
     document.getElementById('viewer-header-right').insertAdjacentHTML('afterbegin',
-      `<a href="#/pool/${poolId}/admin" class="btn btn-sm btn-primary">⚙ Admin</a>`);
+      `<a href="#/pool/${poolId}/admin" class="btn btn-sm btn-primary">${t('admin')}</a>`);
   }
 
   renderViewerContent(pool);
@@ -682,15 +1079,15 @@ function renderViewerContent(pool) {
     </div>`;
 
   const lockNotice = pool.allocation_locked
-    ? '<p class="lock-notice">🔒 Allocation locked</p>' : '';
+    ? `<p class="lock-notice">${t('allocation_locked')}</p>` : '';
 
   const elim = pool.eliminated_teams || [];
   const totalAlive = 48 - elim.length;
   const bannerHTML = elim.length > 0
     ? `<div class="elim-banner">
          <span class="elim-banner-stat">
-           ⚽ <strong>${totalAlive}</strong> teams still in ·
-           ❌ <strong>${elim.length}</strong> eliminated
+           ${t('teams_still_in', totalAlive)} ·
+           ${t('teams_eliminated', elim.length)}
          </span>
        </div>`
     : '';
@@ -711,10 +1108,11 @@ async function renderAdmin(poolId) {
   document.getElementById('app').innerHTML = `
     <header class="site-header">
       <div class="header-left">
-        <a href="#/" class="header-back">← <span class="header-back-text">My Pools</span></a>
+        <a href="#/" class="header-back">← <span class="header-back-text">${t('my_pools_back')}</span></a>
       </div>
       <div class="header-right">
-        <a href="#/pool/${poolId}" class="btn btn-sm btn-ghost">👁 Viewer</a>
+        <a href="#/pool/${poolId}" class="btn btn-sm btn-ghost">${t('view')}</a>
+        ${localeSwitcherHTML()}
         <button class="theme-toggle" title="Toggle theme">${themeIcon()}</button>
       </div>
     </header>
@@ -723,6 +1121,7 @@ async function renderAdmin(poolId) {
     </main>
     <footer class="site-footer">by NineInchTooL</footer>
   `;
+  bindLocaleSwitcher(document.getElementById('app'));
   document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
 
   let pool;
@@ -730,15 +1129,15 @@ async function renderAdmin(poolId) {
 
   const main = document.getElementById('admin-main');
   if (!pool) {
-    main.innerHTML = '<p class="error-msg center" style="padding:40px 0">Pool not found.</p>'; return;
+    main.innerHTML = `<p class="error-msg center" style="padding:40px 0">${t('pool_not_found_error')}</p>`; return;
   }
   if (pool.owner_id !== currentSession.user.id) {
     main.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">🔒</div>
-        <p class="empty-state-title">Access denied</p>
-        <p class="empty-state-desc">You are not the owner of this pool.</p>
-        <a href="#/" class="btn btn-sm" style="margin-top:8px">← Go home</a>
+        <p class="empty-state-title">${t('access_denied')}</p>
+        <p class="empty-state-desc">${t('not_owner')}</p>
+        <a href="#/" class="btn btn-sm" style="margin-top:8px">${t('go_home')}</a>
       </div>`; return;
   }
 
@@ -757,46 +1156,46 @@ function renderAdminPanel(pool) {
     <div class="card" style="gap:10px">
       <div class="admin-title-wrap">
         <span class="pool-title-editable" id="admin-title-el">${escHtml(pool.title)}</span>
-        <span class="admin-title-label">Admin Panel</span>
+        <span class="admin-title-label">${t('admin_panel_label')}</span>
       </div>
       <div class="participant-count-row">
-        <span id="p-count-display">${pool.participant_count} players</span>
-        <button class="change-link" id="change-count-btn">· change</button>
+        <span id="p-count-display">${t('players', pool.participant_count)}</span>
+        <button class="change-link" id="change-count-btn">${t('change')}</button>
       </div>
       <div id="count-change-wrap" class="hidden row">
         <input type="number" id="count-change-input" min="2" max="12" value="${pool.participant_count}" style="width:80px" />
-        <button class="btn btn-sm btn-primary" id="count-change-save">Save</button>
-        <button class="btn btn-sm" id="count-change-cancel">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="count-change-save">${t('save')}</button>
+        <button class="btn btn-sm" id="count-change-cancel">${t('cancel')}</button>
         <span class="error-msg hidden" id="count-change-err"></span>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-sm" id="copy-link-btn">📋 Share viewer link</button>
-        <button class="btn btn-sm" id="copy-wa-btn" ${hasAlloc ? '' : 'disabled'}>📋 Copy for WhatsApp</button>
+        <button class="btn btn-sm" id="copy-link-btn">${t('share_viewer_link')}</button>
+        <button class="btn btn-sm" id="copy-wa-btn" ${hasAlloc ? '' : 'disabled'}>${t('copy_whatsapp')}</button>
       </div>
       <p class="error-msg hidden" id="settings-error"></p>
     </div>
 
     <!-- Participants -->
     <div class="card">
-      <h3>Participants</h3>
+      <h3>${t('participants')}</h3>
       <p class="participant-counter ${pCount > pool.participant_count ? 'over-limit' : pCount >= pool.participant_count ? 'full' : ''}" id="p-counter">
         ${pCount > pool.participant_count
-          ? `⚠️ ${pCount} / ${pool.participant_count} — please remove ${pCount - pool.participant_count} participant(s)`
-          : `${pCount} / ${pool.participant_count} participants added`}
+          ? t('participant_over_limit', pCount, pool.participant_count)
+          : t('participant_count', pCount, pool.participant_count)}
       </p>
       <div class="participants-list" id="participants-list"></div>
       <div class="add-participant-form">
-        <input type="text" id="new-p-name" placeholder="Name" ${pCount >= pool.participant_count ? 'disabled' : ''} />
-        ${extras ? `<label class="checkbox-row"><input type="checkbox" id="new-p-extra" /> Extra team</label>` : ''}
-        <button class="btn btn-sm btn-primary" id="add-p-btn" ${pCount >= pool.participant_count ? 'disabled' : ''}>Add</button>
+        <input type="text" id="new-p-name" placeholder="${t('name_placeholder')}" ${pCount >= pool.participant_count ? 'disabled' : ''} />
+        ${extras ? `<label class="checkbox-row"><input type="checkbox" id="new-p-extra" /> ${t('extra_team')}</label>` : ''}
+        <button class="btn btn-sm btn-primary" id="add-p-btn" ${pCount >= pool.participant_count ? 'disabled' : ''}>${t('add')}</button>
       </div>
-      ${extras ? '<p class="hint">Mark "Extra team" to flag a participant as priority for an extra team when totals don\'t divide evenly.</p>' : ''}
+      ${extras ? `<p class="hint">${t('extra_team_hint')}</p>` : ''}
     </div>
 
     <!-- Elimination tracker -->
     <details class="card elim-card">
       <summary>
-        <span class="elim-summary-title">⚽ Elimination Tracker</span>
+        <span class="elim-summary-title">${t('elimination_tracker')}</span>
         <span class="elim-summary-arrow">▸</span>
       </summary>
       <div id="elim-body"></div>
@@ -804,13 +1203,13 @@ function renderAdminPanel(pool) {
 
     <!-- Allocation controls -->
     <div class="card">
-      <h3>Allocation</h3>
+      <h3>${t('allocation_heading')}</h3>
       <div class="alloc-actions">
-        <button class="btn btn-primary" id="allocate-btn" ${locked || !pCount ? 'disabled' : ''}>🎲 Allocate Teams</button>
-        <button class="btn" id="lock-btn">${locked ? '🔓 Unlock' : '🔒 Lock'} Allocation</button>
-        <button class="btn btn-danger btn-sm" id="clear-alloc-btn" ${locked || !hasAlloc ? 'disabled' : ''}>Clear</button>
+        <button class="btn btn-primary" id="allocate-btn" ${locked || !pCount ? 'disabled' : ''}>${t('allocate_teams')}</button>
+        <button class="btn" id="lock-btn">${locked ? t('unlock_allocation') : t('lock_allocation')}</button>
+        <button class="btn btn-danger btn-sm" id="clear-alloc-btn" ${locked || !hasAlloc ? 'disabled' : ''}>${t('clear')}</button>
       </div>
-      <p class="hint" id="alloc-hint">${locked ? '🔒 Allocation is locked.' : hasAlloc ? 'Allocation assigned.' : 'No allocation yet.'}</p>
+      <p class="hint" id="alloc-hint">${locked ? t('allocation_is_locked') : hasAlloc ? t('allocation_assigned') : t('no_allocation_yet')}</p>
     </div>
 
     <!-- Allocation preview -->
@@ -818,25 +1217,25 @@ function renderAdminPanel(pool) {
 
     <!-- WhatsApp export -->
     <div class="card" id="export-card" ${hasAlloc ? '' : 'style="display:none"'}>
-      <h3>WhatsApp Export</h3>
+      <h3>${t('whatsapp_export')}</h3>
       <textarea id="export-text" rows="12" readonly>${escHtml(buildExportText(pool))}</textarea>
-      <button class="btn btn-sm btn-primary" id="copy-export-btn">📋 Copy to clipboard</button>
+      <button class="btn btn-sm btn-primary" id="copy-export-btn">${t('copy_to_clipboard')}</button>
     </div>
 
     <!-- Danger zone -->
     <div class="card danger-card">
-      <h3>Danger Zone</h3>
-      <button class="btn btn-danger btn-sm" id="delete-pool-btn">🗑 Delete this pool</button>
+      <h3>${t('danger_zone')}</h3>
+      <button class="btn btn-danger btn-sm" id="delete-pool-btn">${t('delete_this_pool')}</button>
     </div>
 
     <!-- Delete modal -->
     <div id="del-confirm-modal" class="modal hidden">
       <div class="modal-box">
-        <h2 class="modal-title">Delete pool?</h2>
-        <p style="color:var(--color-text-muted);font-size:.9rem">This will permanently delete <strong>${escHtml(pool.title)}</strong> and all its data.</p>
+        <h2 class="modal-title">${t('delete_pool_modal_title')}</h2>
+        <p style="color:var(--color-text-muted);font-size:.9rem">${t('admin_delete_confirm', pool.title)}</p>
         <div class="modal-actions">
-          <button class="btn" id="del-cancel">Cancel</button>
-          <button class="btn btn-danger" id="del-confirm">Delete permanently</button>
+          <button class="btn" id="del-cancel">${t('cancel')}</button>
+          <button class="btn btn-danger" id="del-confirm">${t('delete_permanently')}</button>
         </div>
       </div>
     </div>
@@ -862,11 +1261,11 @@ function bindAdminEvents(pool) {
     const val  = +document.getElementById('count-change-input').value;
     const errEl = document.getElementById('count-change-err');
     if (!val || val < 2 || val > 12) {
-      errEl.textContent = 'Must be 2–12.'; errEl.classList.remove('hidden'); return;
+      errEl.textContent = t('must_be_2_12'); errEl.classList.remove('hidden'); return;
     }
     pool.participant_count = val;
     try { await savePool(pool); renderAdminPanel(pool); }
-    catch { errEl.textContent = 'Save failed.'; errEl.classList.remove('hidden'); }
+    catch { errEl.textContent = t('save_failed'); errEl.classList.remove('hidden'); }
   });
 
   // Share / export
@@ -889,16 +1288,16 @@ function bindAdminEvents(pool) {
   // Allocate
   document.getElementById('allocate-btn').addEventListener('click', async () => {
     if (pool.allocation_locked || !pool.participants?.length) return;
-    if (pool.allocation && !confirm('This will re-randomize the current allocation. Are you sure?')) return;
+    if (pool.allocation && !confirm(t('confirm_realloc'))) return;
     pool.allocation = allocate(pool.participants);
     try { await savePool(pool); refreshAllocUI(pool); }
-    catch { showAdminError('Failed to save allocation.'); }
+    catch { showAdminError(t('failed_save_allocation')); }
   });
 
   // Lock / unlock
   document.getElementById('lock-btn').addEventListener('click', async () => {
     if (pool.allocation_locked) {
-      if (!confirm('Unlock the allocation?')) return;
+      if (!confirm(t('confirm_unlock'))) return;
       pool.allocation_locked = false;
     } else {
       pool.allocation_locked = true;
@@ -906,21 +1305,21 @@ function bindAdminEvents(pool) {
     try {
       await savePool(pool);
       document.getElementById('lock-btn').textContent =
-        pool.allocation_locked ? '🔓 Unlock Allocation' : '🔒 Lock Allocation';
+        pool.allocation_locked ? t('unlock_allocation') : t('lock_allocation');
       document.getElementById('allocate-btn').disabled = pool.allocation_locked;
       document.getElementById('clear-alloc-btn').disabled = pool.allocation_locked || !pool.allocation;
       document.getElementById('alloc-hint').textContent =
-        pool.allocation_locked ? '🔒 Allocation is locked.' : 'Allocation unlocked.';
-    } catch { showAdminError('Failed to save.'); }
+        pool.allocation_locked ? t('allocation_is_locked') : t('allocation_unlocked');
+    } catch { showAdminError(t('failed_save')); }
   });
 
   // Clear allocation
   document.getElementById('clear-alloc-btn').addEventListener('click', async () => {
     if (pool.allocation_locked) return;
-    if (!confirm('Clear the current allocation?')) return;
+    if (!confirm(t('confirm_clear'))) return;
     pool.allocation = null;
     try { await savePool(pool); refreshAllocUI(pool); }
-    catch { showAdminError('Failed to clear allocation.'); }
+    catch { showAdminError(t('failed_clear_allocation')); }
   });
 
   // Delete pool
@@ -930,7 +1329,7 @@ function bindAdminEvents(pool) {
   delModal.addEventListener('click', e => { if (e.target === delModal) delModal.classList.add('hidden'); });
   document.getElementById('del-confirm').addEventListener('click', async () => {
     try { await deletePool(pool.id); navigate('#/'); }
-    catch { showAdminError('Failed to delete pool.'); }
+    catch { showAdminError(t('failed_delete_pool')); }
   });
 }
 
@@ -983,7 +1382,7 @@ function refreshAllocUI(pool) {
   if (card)     card.style.display = pool.allocation ? '' : 'none';
   if (waBtn)    waBtn.disabled     = !pool.allocation;
   if (clearBtn) clearBtn.disabled  = !pool.allocation || pool.allocation_locked;
-  if (hint)     hint.textContent   = pool.allocation ? 'Allocation assigned.' : 'No allocation yet.';
+  if (hint)     hint.textContent   = pool.allocation ? t('allocation_assigned') : t('no_allocation_yet');
   if (allocBtn) allocBtn.disabled  = pool.allocation_locked || !pool.participants?.length;
   if (et)       et.value           = buildExportText(pool);
 }
@@ -1003,7 +1402,7 @@ async function addParticipant(pool) {
     renderParticipantsList(pool);
     updateParticipantCounter(pool);
     refreshAllocUI(pool);
-  } catch { showAdminError('Failed to add participant.'); }
+  } catch { showAdminError(t('failed_add_participant')); }
 }
 
 function renderParticipantsList(pool) {
@@ -1014,7 +1413,7 @@ function renderParticipantsList(pool) {
   container.innerHTML = (pool.participants || []).map(p => `
     <div class="participant-row" data-id="${p.id}">
       <span class="p-name">${escHtml(p.name)}</span>
-      ${extras ? `<span class="p-extra ${p.extraTeam ? '' : 'hidden-badge'}">+extra</span>` : ''}
+      ${extras ? `<span class="p-extra ${p.extraTeam ? '' : 'hidden-badge'}">${t('extra_badge')}</span>` : ''}
       <button class="btn-icon edit-p-btn" data-id="${p.id}" title="Edit">✏️</button>
       <button class="btn-icon del-p-btn"  data-id="${p.id}" title="Remove">🗑</button>
     </div>
@@ -1036,8 +1435,8 @@ function renderParticipantsList(pool) {
   if (counterEl) {
     const overLimit = n > pool.participant_count;
     counterEl.textContent = overLimit
-      ? `⚠️ ${n} / ${pool.participant_count} — please remove ${n - pool.participant_count} participant(s)`
-      : `${n} / ${pool.participant_count} participants added`;
+      ? t('participant_over_limit', n, pool.participant_count)
+      : t('participant_count', n, pool.participant_count);
     counterEl.className = `participant-counter ${overLimit ? 'over-limit' : (full ? 'full' : '')}`;
   }
 }
@@ -1049,9 +1448,9 @@ function editParticipantInline(pool, id) {
   const extras = 12 % (pool.participant_count || 1) > 0;
   row.innerHTML = `
     <input class="p-edit-name" type="text" value="${escHtml(p.name)}" style="flex:1;min-width:100px" />
-    ${extras ? `<label class="checkbox-row"><input class="p-edit-extra" type="checkbox" ${p.extraTeam ? 'checked' : ''} /> Extra</label>` : ''}
-    <button class="btn btn-sm btn-primary p-save-btn">Save</button>
-    <button class="btn btn-sm p-cancel-btn">Cancel</button>
+    ${extras ? `<label class="checkbox-row"><input class="p-edit-extra" type="checkbox" ${p.extraTeam ? 'checked' : ''} /> ${t('extra_inline')}</label>` : ''}
+    <button class="btn btn-sm btn-primary p-save-btn">${t('save')}</button>
+    <button class="btn btn-sm p-cancel-btn">${t('cancel')}</button>
   `;
   row.querySelector('.p-edit-name').focus();
   row.querySelector('.p-save-btn').addEventListener('click', async () => {
@@ -1059,7 +1458,7 @@ function editParticipantInline(pool, id) {
     if (!newName) return;
     p.name = newName;
     p.extraTeam = row.querySelector('.p-edit-extra')?.checked || false;
-    try { await savePool(pool); } catch { showAdminError('Failed to save.'); }
+    try { await savePool(pool); } catch { showAdminError(t('failed_save')); }
     renderParticipantsList(pool);
     refreshAllocUI(pool);
   });
@@ -1078,7 +1477,7 @@ async function removeParticipant(pool, id) {
     renderParticipantsList(pool);
     updateParticipantCounter(pool);
     refreshAllocUI(pool);
-  } catch { showAdminError('Failed to remove participant.'); }
+  } catch { showAdminError(t('failed_remove_participant')); }
 }
 
 function updateParticipantCounter(pool) {
@@ -1087,8 +1486,8 @@ function updateParticipantCounter(pool) {
   const n = (pool.participants || []).length;
   const overLimit = n > pool.participant_count;
   el.textContent = overLimit
-    ? `⚠️ ${n} / ${pool.participant_count} — please remove ${n - pool.participant_count} participant(s)`
-    : `${n} / ${pool.participant_count} participants added`;
+    ? t('participant_over_limit', n, pool.participant_count)
+    : t('participant_count', n, pool.participant_count);
   el.className = `participant-counter ${overLimit ? 'over-limit' : (n >= pool.participant_count ? 'full' : '')}`;
 }
 
@@ -1096,13 +1495,6 @@ function updateParticipantCounter(pool) {
 function renderEliminationTracker(pool) {
   const body = document.getElementById('elim-body');
   if (!body) return;
-
-  const tierLabels = {
-    1: '⭐ Tier 1 — Favoritos',
-    2: '🔵 Tier 2 — Contendientes',
-    3: '🟢 Tier 3 — Intermedios',
-    4: '⚪ Tier 4 — Sorpresas',
-  };
 
   body.innerHTML = '';
 
@@ -1112,7 +1504,7 @@ function renderEliminationTracker(pool) {
   const syncBtn = document.createElement('button');
   syncBtn.id = 'elim-sync-btn';
   syncBtn.className = 'btn btn-sm elim-sync-btn';
-  syncBtn.textContent = '🔄 Sync Scores';
+  syncBtn.textContent = t('sync_scores');
   header.appendChild(syncBtn);
   body.appendChild(header);
 
@@ -1123,15 +1515,15 @@ function renderEliminationTracker(pool) {
     banner.className = 'elim-suggestions';
     const label = document.createElement('span');
     label.className = 'sugg-label';
-    label.textContent = '📊 Suggested eliminations based on live scores:';
+    label.textContent = t('suggested_eliminations');
     banner.appendChild(label);
-    nonElim.forEach(t => {
-      const tid = teamId(t);
+    nonElim.forEach(team => {
+      const tid = teamId(team);
       const chip = document.createElement('span');
       chip.className = 'sugg-chip';
       const name = document.createElement('button');
       name.className = 'sugg-name';
-      name.textContent = `${t.flag} ${t.name}`;
+      name.textContent = `${team.flag} ${localTeamName(team.name)}`;
       name.addEventListener('click', () => {
         currentSuggestions = currentSuggestions.filter(s => teamId(s) !== tid);
         const target = body.querySelector(`button.elim-chip[data-team-id="${CSS.escape(tid)}"]`);
@@ -1159,17 +1551,17 @@ function renderEliminationTracker(pool) {
     group.className = 'elim-tier-group';
     const label = document.createElement('div');
     label.className = 'elim-tier-label';
-    label.textContent = tierLabels[tier];
+    label.textContent = t(`tier_${tier}`);
     group.appendChild(label);
     const chips = document.createElement('div');
     chips.className = 'elim-chips';
-    TEAMS.filter(t => t.tier === tier).forEach(team => {
+    TEAMS.filter(tm => tm.tier === tier).forEach(team => {
       const id  = teamId(team);
       const out = (pool.eliminated_teams || []).includes(id);
       const chip = document.createElement('button');
       chip.className = `elim-chip${out ? ' is-elim' : ''}`;
       chip.dataset.teamId = id;
-      chip.textContent = (out ? '❌ ' : '') + `${team.flag} ${team.name}`;
+      chip.textContent = (out ? '❌ ' : '') + `${team.flag} ${localTeamName(team.name)}`;
       let saving = false;
       chip.addEventListener('click', async () => {
         if (saving) return;
@@ -1179,7 +1571,7 @@ function renderEliminationTracker(pool) {
         const idx  = elim.indexOf(id);
         pool.eliminated_teams = idx === -1 ? [...elim, id] : elim.filter(n => n !== id);
         try { await savePool(pool); renderEliminationTracker(pool); refreshAllocUI(pool); }
-        catch { showAdminError('Failed to update.'); saving = false; }
+        catch { showAdminError(t('failed_update')); saving = false; }
       });
       chips.appendChild(chip);
     });
@@ -1189,13 +1581,13 @@ function renderEliminationTracker(pool) {
 
   // Sync button handler
   syncBtn.addEventListener('click', async () => {
-    syncBtn.textContent = 'Syncing…';
+    syncBtn.textContent = t('syncing');
     syncBtn.disabled = true;
     try {
       const matches = await fetchLiveScores();
       if (!matches.length) {
         showElimSyncError(header);
-        syncBtn.textContent = '🔄 Sync Scores';
+        syncBtn.textContent = t('sync_scores');
         syncBtn.disabled = false;
         return;
       }
@@ -1203,7 +1595,7 @@ function renderEliminationTracker(pool) {
       renderEliminationTracker(pool);
     } catch {
       showElimSyncError(header);
-      syncBtn.textContent = '🔄 Sync Scores';
+      syncBtn.textContent = t('sync_scores');
       syncBtn.disabled = false;
     }
   });
@@ -1223,7 +1615,7 @@ function renderEliminationTracker(pool) {
 function showElimSyncError(container) {
   const err = document.createElement('span');
   err.className = 'elim-sync-error';
-  err.textContent = 'Could not fetch scores';
+  err.textContent = t('could_not_fetch');
   container.appendChild(err);
   setTimeout(() => err.remove(), 3000);
 }
