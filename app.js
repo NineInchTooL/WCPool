@@ -480,7 +480,7 @@ async function renderDashboard() {
     </div>
   `;
 
-  document.getElementById('sign-out-btn').addEventListener('click', () => db.auth.signOut());
+  document.getElementById('sign-out-btn').addEventListener('click', async () => { await db.auth.signOut(); });
   document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
 
   let pools = [];
@@ -1272,7 +1272,7 @@ async function init() {
       navigate(redirect && redirect !== '#/' && !redirect.includes('access_token') ? redirect : '#/');
       return;
     }
-    if (event === 'SIGNED_OUT') { navigate('#/'); return; }
+    if (event === 'SIGNED_OUT') { navigate('#/'); router(); return; }
     // TOKEN_REFRESHED and INITIAL_SESSION must not re-render —
     // INITIAL_SESSION fires right after the explicit router() call below
     // and would cause a concurrent render that doubles event listeners.
