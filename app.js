@@ -1077,7 +1077,7 @@ function formatMatchTime(utcDateStr) {
 function renderTodayMatchesStrip(matches) {
   const wrap = document.getElementById('today-matches-wrap');
   if (!wrap) return;
-  if (!matches.length) {
+  if (!Array.isArray(matches) || !matches.length) {
     wrap.innerHTML = `<p class="today-matches-empty">${t('noMatchesToday')}</p>`;
     return;
   }

@@ -979,6 +979,7 @@ details.elim-card[open] > summary {
 }
 .today-matches-scroll {
   display: flex;
+  flex: 1;
   gap: 8px;
   overflow-x: auto;
   scrollbar-width: none;
