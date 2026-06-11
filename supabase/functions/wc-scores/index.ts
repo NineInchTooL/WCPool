@@ -19,11 +19,13 @@ Deno.serve(async (req) => {
 
   // ── Today's fixtures mode ──────────────────────────────────────────
   if (mode === 'today') {
+    // "today" in UTC. Evening local games (e.g. 20:00 ET = 00:00 UTC next day)
+    // would be missed by a UTC-only query, so we always run both sources and merge.
     const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' in UTC
     type TodayMatch = { home: string; away: string; utcDate: string; status: string; group: string };
-    let todayMatches: TodayMatch[] | null = null;
 
-    // Primary: football-data.org
+    // Primary: football-data.org — proper UTC timestamps, accurate for UTC-day games
+    let fdoMatches: TodayMatch[] = [];
     try {
       const apiKey = Deno.env.get('FOOTBALL_DATA_API_KEY') ?? '';
       const res = await fetch(
@@ -33,7 +35,7 @@ Deno.serve(async (req) => {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.matches)) {
-          todayMatches = data.matches.map((m: any) => ({
+          fdoMatches = data.matches.map((m: any) => ({
             home:    m.homeTeam.name as string,
             away:    m.awayTeam.name as string,
             utcDate: m.utcDate as string,
@@ -42,49 +44,57 @@ Deno.serve(async (req) => {
           }));
         }
       }
-    } catch (_) { /* fall through to fallback */ }
+    } catch (_) { /* fall through */ }
 
-    // Fallback: worldcup26.ir — requires Accept: text/json to get real data (not schema)
-    if (!todayMatches) {
-      try {
-        const res = await fetch('https://worldcup26.ir/get/games', {
-          headers: { 'Accept': 'application/json' },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          // local_date format: "MM/DD/YYYY HH:MM" (local stadium time, not UTC)
-          todayMatches = (data.games as any[] ?? [])
-            .filter((g: any) => {
-              const ld = String(g.local_date ?? '');
-              if (!ld) return false;
-              const [datePart] = ld.split(' ');
-              const [mm, dd, yyyy] = datePart.split('/');
-              if (!yyyy) return false;
-              return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}` === today;
-            })
-            .map((g: any) => {
-              // Convert "MM/DD/YYYY HH:MM" → "YYYY-MM-DDTHH:MM:00" for cross-browser Date()
-              const ld = String(g.local_date ?? '');
-              const [datePart = '', timePart = '00:00'] = ld.split(' ');
-              const [mm = '01', dd = '01', yyyy = '2026'] = datePart.split('/');
-              const isoDate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}T${timePart}:00`;
-              const elapsed = String(g.time_elapsed ?? '').toLowerCase();
-              const status = (elapsed === 'ft' || g.finished === 'TRUE') ? 'FINISHED'
-                           : ['1st', 'ht', '2nd', 'et', 'pen'].includes(elapsed) ? 'IN_PLAY'
-                           : 'TIMED';
-              return {
-                home:    g.home_team_name_en as string,
-                away:    g.away_team_name_en as string,
-                utcDate: isoDate,
-                status,
-                group:   (g.group ?? '') as string,
-              };
-            });
-        }
-      } catch (_) { /* fall through */ }
-    }
+    // Supplementary: worldcup26.ir — local-date filter catches evening games
+    // that spill past UTC midnight and are missed by football-data.org above
+    let irMatches: TodayMatch[] = [];
+    try {
+      const res = await fetch('https://worldcup26.ir/get/games', {
+        headers: { 'Accept': 'application/json' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // local_date format: "MM/DD/YYYY HH:MM" (local stadium time, not UTC)
+        irMatches = (data.games as any[] ?? [])
+          .filter((g: any) => {
+            const ld = String(g.local_date ?? '');
+            if (!ld) return false;
+            const [datePart] = ld.split(' ');
+            const [mm, dd, yyyy] = datePart.split('/');
+            if (!yyyy) return false;
+            return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}` === today;
+          })
+          .map((g: any) => {
+            // Convert "MM/DD/YYYY HH:MM" → "YYYY-MM-DDTHH:MM:00" for cross-browser Date()
+            const ld = String(g.local_date ?? '');
+            const [datePart = '', timePart = '00:00'] = ld.split(' ');
+            const [mm = '01', dd = '01', yyyy = '2026'] = datePart.split('/');
+            const isoDate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}T${timePart}:00`;
+            const elapsed = String(g.time_elapsed ?? '').toLowerCase();
+            const status = (elapsed === 'ft' || g.finished === 'TRUE') ? 'FINISHED'
+                         : ['1st', 'ht', '2nd', 'et', 'pen'].includes(elapsed) ? 'IN_PLAY'
+                         : 'TIMED';
+            return {
+              home:    g.home_team_name_en as string,
+              away:    g.away_team_name_en as string,
+              utcDate: isoDate,
+              status,
+              group:   (g.group ?? '') as string,
+            };
+          });
+      }
+    } catch (_) { /* fall through */ }
 
-    return new Response(JSON.stringify(todayMatches ?? []), {
+    // Merge: football-data.org entries take precedence (have proper UTC times).
+    // Supplement with worldcup26.ir entries not already present.
+    const fdoKeys = new Set(fdoMatches.map((m) => `${m.home}|${m.away}`));
+    const merged = [
+      ...fdoMatches,
+      ...irMatches.filter((m) => !fdoKeys.has(`${m.home}|${m.away}`)),
+    ];
+
+    return new Response(JSON.stringify(merged), {
       headers: { ...CORS, 'Content-Type': 'application/json' },
     });
   }
