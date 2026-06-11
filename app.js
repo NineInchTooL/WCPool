@@ -874,66 +874,48 @@ function showPwaBanner(type) {
   document.body.appendChild(banner);
 }
 
-// ── Auth modal (sign in to save) ───────────────────────────────────
-function showAuthModal() {
-  if (document.getElementById('auth-modal')) return;
+// ── Shared auth form (modal + landing) ────────────────────────────
+function renderAuthForm(container) {
+  const stateA = document.createElement('div');
+  stateA.setAttribute('data-auth-state', 'initial');
+  stateA.innerHTML = `
+    <button id="auth-google-btn" class="btn auth-btn-google" type="button" aria-label="${escHtml(t('auth_google'))}">
+      ${GOOGLE_ICON}
+      <span>${escHtml(t('auth_google'))}</span>
+    </button>
+    <div class="auth-divider" aria-hidden="true">
+      <span>${escHtml(t('auth_or_divider'))}</span>
+    </div>
+    <form id="auth-magic-form" novalidate>
+      <label for="auth-email" class="sr-only">${escHtml(t('auth_email_placeholder'))}</label>
+      <input
+        id="auth-email"
+        type="email"
+        autocomplete="email"
+        inputmode="email"
+        class="auth-input"
+        placeholder="${escHtml(t('auth_email_placeholder'))}"
+        required
+      />
+      <button id="auth-magic-btn" class="btn auth-btn-magic" type="submit">
+        ${escHtml(t('auth_magic_link_btn'))}
+      </button>
+    </form>
+    <p class="error-msg hidden" id="auth-error"></p>`;
 
-  const overlay = document.createElement('div');
-  overlay.id        = 'auth-modal';
-  overlay.className = 'modal';
-  overlay.setAttribute('role', 'dialog');
-  overlay.setAttribute('aria-modal', 'true');
-  overlay.setAttribute('aria-labelledby', 'auth-modal-title');
+  const stateB = document.createElement('div');
+  stateB.className = 'auth-modal__sent';
+  stateB.hidden    = true;
+  stateB.innerHTML = `
+    <div class="auth-sent-icon">✉️</div>
+    <h3>${escHtml(t('auth_check_email'))}</h3>
+    <p id="auth-sent-detail" class="auth-sent-detail"></p>`;
 
-  overlay.innerHTML = `
-    <div class="modal-box">
-      <div data-auth-state="initial">
-        <h2 id="auth-modal-title" class="modal-title">${escHtml(t('auth_modal_title'))}</h2>
-        <p style="color:var(--color-text-muted);font-size:.9rem;margin-top:-8px;margin-bottom:16px">${escHtml(t('auth_modal_subtitle'))}</p>
-        <button id="auth-google-btn" class="btn auth-btn-google" type="button" aria-label="${escHtml(t('auth_google'))}">
-          ${GOOGLE_ICON}
-          <span>${escHtml(t('auth_google'))}</span>
-        </button>
-        <div class="auth-divider" aria-hidden="true">
-          <span>${escHtml(t('auth_or_divider'))}</span>
-        </div>
-        <form id="auth-magic-form" novalidate>
-          <label for="auth-email" class="sr-only">${escHtml(t('auth_email_placeholder'))}</label>
-          <input
-            id="auth-email"
-            type="email"
-            autocomplete="email"
-            inputmode="email"
-            class="auth-input"
-            placeholder="${escHtml(t('auth_email_placeholder'))}"
-            required
-          />
-          <button id="auth-magic-btn" class="btn auth-btn-magic" type="submit">
-            ${escHtml(t('auth_magic_link_btn'))}
-          </button>
-        </form>
-        <p class="error-msg hidden" id="auth-error"></p>
-      </div>
-      <div class="auth-modal__sent" hidden>
-        <div class="auth-sent-icon">✉️</div>
-        <h3>${escHtml(t('auth_check_email'))}</h3>
-        <p id="auth-sent-detail" class="auth-sent-detail"></p>
-      </div>
-    </div>`;
+  container.appendChild(stateA);
+  container.appendChild(stateB);
 
-  document.body.appendChild(overlay);
-  overlay.querySelector('#auth-google-btn').focus();
-
-  const close = () => {
-    overlay.remove();
-    document.removeEventListener('keydown', onKey);
-  };
-  const onKey = e => { if (e.key === 'Escape') close(); };
-  document.addEventListener('keydown', onKey);
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-
-  overlay.querySelector('#auth-google-btn').addEventListener('click', async () => {
-    const btn = overlay.querySelector('#auth-google-btn');
+  stateA.querySelector('#auth-google-btn').addEventListener('click', async () => {
+    const btn = stateA.querySelector('#auth-google-btn');
     btn.disabled = true;
     btn.setAttribute('aria-busy', 'true');
     const { error } = await db.auth.signInWithOAuth({
@@ -947,10 +929,10 @@ function showAuthModal() {
     }
   });
 
-  overlay.querySelector('#auth-magic-form').addEventListener('submit', async e => {
+  stateA.querySelector('#auth-magic-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const emailInput = overlay.querySelector('#auth-email');
-    const btn        = overlay.querySelector('#auth-magic-btn');
+    const emailInput = stateA.querySelector('#auth-email');
+    const btn        = stateA.querySelector('#auth-magic-btn');
     const email      = emailInput.value.trim();
     if (!email || !emailInput.checkValidity()) { emailInput.focus(); return; }
     btn.disabled = true;
@@ -963,9 +945,9 @@ function showAuthModal() {
       showAuthError(error.message);
       return;
     }
-    overlay.querySelector('[data-auth-state="initial"]').hidden = true;
-    overlay.querySelector('.auth-modal__sent').hidden = false;
-    overlay.querySelector('#auth-sent-detail').textContent =
+    stateA.hidden = true;
+    stateB.hidden = false;
+    stateB.querySelector('#auth-sent-detail').textContent =
       t('auth_check_email_sub').replace('{email}', email);
   });
 }
@@ -975,6 +957,33 @@ function showAuthError(msg) {
   if (!el) return;
   el.textContent = msg;
   el.classList.remove('hidden');
+}
+
+// ── Auth modal (sign in to save) ───────────────────────────────────
+function showAuthModal() {
+  if (document.getElementById('auth-modal')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id        = 'auth-modal';
+  overlay.className = 'modal';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'auth-modal-title');
+
+  const box = document.createElement('div');
+  box.className = 'modal-box';
+  box.innerHTML = `
+    <h2 id="auth-modal-title" class="modal-title">${escHtml(t('auth_modal_title'))}</h2>
+    <p style="color:var(--color-text-muted);font-size:.9rem;margin-top:-8px;margin-bottom:16px">${escHtml(t('auth_modal_subtitle'))}</p>`;
+  renderAuthForm(box);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  box.querySelector('#auth-google-btn').focus();
+
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
 
 // ── Live viewer helpers ────────────────────────────────────────────
@@ -1146,8 +1155,6 @@ function renderLanding() {
           <div class="landing-icon"><svg width="56" height="56" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M14 2L25.26 8.5V21.5L14 28L2.74 21.5V8.5L14 2Z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/><path d="M8 10L10.5 18L14 13L17.5 18L20 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></div>
           <h1 class="landing-title">WCPool</h1>
           <p class="landing-subtitle">${t('landing_subtitle')}</p>
-          <div class="landing-divider"></div>
-          <button class="btn-google" id="landing-sign-in">${GOOGLE_ICON} ${t('sign_in_google')}</button>
         </div>
       </main>
       <footer class="landing-footer">by NineInchTooL</footer>
@@ -1155,7 +1162,7 @@ function renderLanding() {
   `;
   bindLocaleSwitcher(document.getElementById('app'));
   document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
-  document.getElementById('landing-sign-in').addEventListener('click', signInWithGoogle);
+  renderAuthForm(document.querySelector('.landing-card'));
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────
