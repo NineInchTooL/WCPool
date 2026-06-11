@@ -1102,6 +1102,21 @@ details.elim-card[open] > summary {
   .today-matches-scroll {
     width: 100%;
     justify-content: flex-start;
+    flex-direction: column;
+    overflow-x: visible;
+    overflow-y: visible;
+    gap: 6px;
+  }
+
+  .today-match-card {
+    width: 100%;
+    min-width: unset;
+    box-sizing: border-box;
+  }
+
+  .today-match-side {
+    min-width: 0;
+    flex: 1;
   }
 }
 
