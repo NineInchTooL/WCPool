@@ -1,0 +1,10 @@
+# Environment / secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Supabase local state
+supabase/.temp/
+
+# OS
+.DS_Store
