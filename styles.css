@@ -1091,6 +1091,20 @@ details.elim-card[open] > summary {
   background: rgba(34, 197, 94, 0.12);
 }
 
+@media (max-width: 640px) {
+  .today-matches-strip {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 10px 20px;
+  }
+
+  .today-matches-scroll {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
 /* ── Auth modal ──────────────────────────────────────────────── */
 .auth-btn-google {
   display: flex;
