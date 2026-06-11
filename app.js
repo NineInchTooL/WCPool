@@ -155,6 +155,8 @@ let realtimeChannel = null;
 let currentSuggestions = [];
 let elimSyncIntervalId = null;
 let lastUpdatedInterval = null;
+let todayMatchesCache = null; // null = unfetched; [] = fetched, none today
+let todayMatchMap = null;     // Map<spanishCanonicalName, { opponentEs, utcDate, status }>
 const dismissedEliminationNotices = new Map(); // poolId → Set<teamName>
 
 // ── i18n ───────────────────────────────────────────────────────────
@@ -300,6 +302,14 @@ const TRANSLATIONS = {
     auth_magic_link_btn:       'Send magic link',
     auth_check_email:          '✉️ Check your inbox!',
     auth_check_email_sub:      'We sent a link to {email}',
+    // Today's Matches
+    todaysMatches:             "Today's Matches",
+    noMatchesToday:            'No matches today',
+    playsTodayVs:              opp => `Today vs ${opp}`,
+    matchTodayAt:              time => `Today at ${time}`,
+    liveNow:                   '🔴 Live',
+    scheduled:                 'Scheduled',
+    finished:                  'Finished',
   },
   'es-MX': {
     landing_subtitle:          'Crea y gestiona tu quiniela del Mundial 2026',
@@ -425,6 +435,14 @@ const TRANSLATIONS = {
     auth_magic_link_btn:       'Enviar link mágico',
     auth_check_email:          '✉️ ¡Revisa tu correo!',
     auth_check_email_sub:      'Enviamos un link a {email}',
+    // Today's Matches
+    todaysMatches:             'Partidos de Hoy',
+    noMatchesToday:            'Sin partidos hoy',
+    playsTodayVs:              opp => `Hoy vs ${opp}`,
+    matchTodayAt:              time => `Hoy a las ${time}`,
+    liveNow:                   '🔴 En vivo',
+    scheduled:                 'Programado',
+    finished:                  'Finalizado',
   },
   'pt-PT': {
     landing_subtitle:          'Crie e gerencie o seu bolão da Copa do Mundo 2026',
@@ -550,6 +568,14 @@ const TRANSLATIONS = {
     auth_magic_link_btn:       'Enviar link mágico',
     auth_check_email:          '✉️ Verifique o seu email!',
     auth_check_email_sub:      'Enviámos um link para {email}',
+    // Today's Matches
+    todaysMatches:             'Jogos de Hoje',
+    noMatchesToday:            'Sem jogos hoje',
+    playsTodayVs:              opp => `Hoje vs ${opp}`,
+    matchTodayAt:              time => `Hoje às ${time}`,
+    liveNow:                   '🔴 Ao vivo',
+    scheduled:                 'Agendado',
+    finished:                  'Terminado',
   },
 };
 
@@ -1016,6 +1042,73 @@ async function fetchLiveScores() {
   return res.json();
 }
 
+// ── Today's Matches ────────────────────────────────────────────────
+async function fetchTodayMatches() {
+  if (todayMatchesCache !== null) return todayMatchesCache;
+  try {
+    const url = `${window.SUPABASE_URL}/functions/v1/wc-scores?mode=today`;
+    const res = await fetch(url, { headers: { apikey: window.SUPABASE_ANON_KEY } });
+    todayMatchesCache = res.ok ? await res.json() : [];
+  } catch {
+    todayMatchesCache = [];
+  }
+  todayMatchMap = buildTodayMatchMap(todayMatchesCache);
+  return todayMatchesCache;
+}
+
+function buildTodayMatchMap(matches) {
+  const map = new Map();
+  for (const m of matches) {
+    const homeEs = EN_TO_LOCAL[m.home] || null;
+    const awayEs = EN_TO_LOCAL[m.away] || null;
+    if (homeEs) map.set(homeEs, { opponentEs: awayEs, utcDate: m.utcDate, status: m.status });
+    if (awayEs) map.set(awayEs, { opponentEs: homeEs, utcDate: m.utcDate, status: m.status });
+  }
+  return map;
+}
+
+function formatMatchTime(utcDateStr) {
+  if (!utcDateStr) return '';
+  try {
+    return new Date(utcDateStr).toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
+  } catch { return ''; }
+}
+
+function renderTodayMatchesStrip(matches) {
+  const wrap = document.getElementById('today-matches-wrap');
+  if (!wrap) return;
+  if (!matches.length) {
+    wrap.innerHTML = `<p class="today-matches-empty">${t('noMatchesToday')}</p>`;
+    return;
+  }
+  const cards = matches.map(m => {
+    const homeEs = EN_TO_LOCAL[m.home] || m.home;
+    const awayEs = EN_TO_LOCAL[m.away] || m.away;
+    const homeTeam = TEAMS.find(team => team.name === homeEs);
+    const awayTeam = TEAMS.find(team => team.name === awayEs);
+    const homeDisplay = escHtml((homeTeam ? localTeamName(homeTeam.name) : m.home));
+    const awayDisplay = escHtml((awayTeam ? localTeamName(awayTeam.name) : m.away));
+    const homeFlag = homeTeam?.flag ?? '';
+    const awayFlag = awayTeam?.flag ?? '';
+    const isLive   = m.status === 'IN_PLAY' || m.status === 'PAUSED';
+    const isDone   = m.status === 'FINISHED';
+    const timeStr  = formatMatchTime(m.utcDate);
+    const badge    = isLive ? `<span class="match-badge match-badge--live">${t('liveNow')}</span>`
+                   : isDone ? `<span class="match-badge match-badge--done">${t('finished')}</span>`
+                   : timeStr ? `<span class="match-badge">${escHtml(timeStr)}</span>`
+                   : '';
+    return `<div class="today-match-card">
+      <span class="today-match-teams">${escHtml(homeFlag)} ${homeDisplay} <span class="today-match-vs">v</span> ${escHtml(awayFlag)} ${awayDisplay}</span>
+      ${badge}
+    </div>`;
+  }).join('');
+  wrap.innerHTML = `
+    <div class="today-matches-strip">
+      <span class="today-matches-label">${escHtml(t('todaysMatches'))}</span>
+      <div class="today-matches-scroll">${cards}</div>
+    </div>`;
+}
+
 function computeSuggestions(matches) {
   const standings = {};
   for (const m of matches) {
@@ -1087,16 +1180,29 @@ function allocationCardsHTML(pool) {
   const eliminated = pool.eliminated_teams || [];
   return (pool.participants || []).map(p => {
     const teams = pool.allocation[p.id] || [];
-    const alive = teams.filter(t => !eliminated.includes(teamId(t))).length;
+    const alive = teams.filter(tm => !eliminated.includes(teamId(tm))).length;
     const out   = teams.length - alive;
-    const aliveTeams   = teams.filter(t => !eliminated.includes(teamId(t)));
-    const deadTeams    = teams.filter(t =>  eliminated.includes(teamId(t)));
+    const aliveTeams   = teams.filter(tm => !eliminated.includes(teamId(tm)));
+    const deadTeams    = teams.filter(tm =>  eliminated.includes(teamId(tm)));
     const orderedTeams = [...aliveTeams, ...deadTeams];
-    const teamsHtml = orderedTeams.map(t => {
-      const isElim = eliminated.includes(teamId(t));
+    const teamsHtml = orderedTeams.map(tm => {
+      const isElim    = eliminated.includes(teamId(tm));
+      const todayInfo = todayMatchMap?.get(tm.name);
+      let todayBadge  = '';
+      if (todayInfo && !isElim) {
+        const oppDisplay = todayInfo.opponentEs ? localTeamName(todayInfo.opponentEs) : '';
+        const isLive  = todayInfo.status === 'IN_PLAY' || todayInfo.status === 'PAUSED';
+        const isDone  = todayInfo.status === 'FINISHED';
+        const timeStr = (!isDone && !isLive) ? formatMatchTime(todayInfo.utcDate) : '';
+        const detail  = isLive ? t('liveNow') : isDone ? '' : timeStr ? `· ${timeStr}` : '';
+        if (oppDisplay || isLive) {
+          todayBadge = `<span class="team-today-badge${isLive ? ' team-today-badge--live' : ''}">${escHtml(t('playsTodayVs', oppDisplay))}${detail ? ' ' + escHtml(detail) : ''}</span>`;
+        }
+      }
       return `<li class="${isElim ? 'team-eliminated' : ''}">
-        <span class="tier-dot tier-${t.tier}"></span>
-        ${isElim ? '❌ ' : '✅ '}${escHtml(t.flag)} ${escHtml(localTeamName(t.name))}
+        <span class="tier-dot tier-${tm.tier}"></span>
+        ${isElim ? '❌ ' : '✅ '}${escHtml(tm.flag)} ${escHtml(localTeamName(tm.name))}
+        ${todayBadge}
       </li>`;
     }).join('');
     const statusText = out === 0
@@ -1475,6 +1581,7 @@ async function renderViewer(poolId) {
       </div>
     </header>
     <div id="pool-hero-wrap"></div>
+    <div id="today-matches-wrap"></div>
     <div class="main-content" id="viewer-content">
       <div class="center" style="padding:40px 0"><span class="loading-spinner"></span></div>
     </div>
@@ -1554,6 +1661,12 @@ async function renderViewer(poolId) {
   viewerActions.appendChild(liveEl);
 
   renderViewerContent(pool);
+
+  // Fetch today's matches (non-blocking) — re-render cards once data lands
+  fetchTodayMatches().then(todayMatches => {
+    renderTodayMatchesStrip(todayMatches);
+    if (todayMatches.length > 0) renderViewerContent(pool); // add badges
+  });
 
   // Track last-known eliminations for pulse + non-owner alerts
   let lastKnownEliminated = new Set(pool.eliminated_teams || []);
