@@ -305,8 +305,7 @@ const TRANSLATIONS = {
     // Today's Matches
     todaysMatches:             "Today's Matches",
     noMatchesToday:            'No matches today',
-    playsTodayVs:              opp => `Today vs ${opp}`,
-    matchTodayAt:              time => `Today at ${time}`,
+    today_badge:               time => `Today ${time}`,
     liveNow:                   '🔴 Live',
     scheduled:                 'Scheduled',
     finished:                  'Finished',
@@ -438,8 +437,7 @@ const TRANSLATIONS = {
     // Today's Matches
     todaysMatches:             'Partidos de Hoy',
     noMatchesToday:            'Sin partidos hoy',
-    playsTodayVs:              opp => `Hoy vs ${opp}`,
-    matchTodayAt:              time => `Hoy a las ${time}`,
+    today_badge:               time => `Hoy ${time}`,
     liveNow:                   '🔴 En vivo',
     scheduled:                 'Programado',
     finished:                  'Finalizado',
@@ -571,8 +569,7 @@ const TRANSLATIONS = {
     // Today's Matches
     todaysMatches:             'Jogos de Hoje',
     noMatchesToday:            'Sem jogos hoje',
-    playsTodayVs:              opp => `Hoje vs ${opp}`,
-    matchTodayAt:              time => `Hoje às ${time}`,
+    today_badge:               time => `Hoje ${time}`,
     liveNow:                   '🔴 Ao vivo',
     scheduled:                 'Agendado',
     finished:                  'Terminado',
@@ -1074,7 +1071,16 @@ function formatMatchTime(utcDateStr) {
   } catch { return ''; }
 }
 
-function renderTodayMatchesStrip(matches) {
+function getTeamOwner(teamNameEs, pool) {
+  if (!pool?.allocation || !pool?.participants) return null;
+  for (const p of pool.participants) {
+    const teams = pool.allocation[p.id] || [];
+    if (teams.some(tm => tm.name === teamNameEs)) return p.name;
+  }
+  return null;
+}
+
+function renderTodayMatchesStrip(matches, pool = null) {
   const wrap = document.getElementById('today-matches-wrap');
   if (!wrap) return;
   if (!Array.isArray(matches) || !matches.length) {
@@ -1084,22 +1090,34 @@ function renderTodayMatchesStrip(matches) {
   const cards = matches.map(m => {
     const homeEs = EN_TO_LOCAL[m.home] || m.home;
     const awayEs = EN_TO_LOCAL[m.away] || m.away;
-    const homeTeam = TEAMS.find(team => team.name === homeEs);
-    const awayTeam = TEAMS.find(team => team.name === awayEs);
-    const homeDisplay = escHtml((homeTeam ? localTeamName(homeTeam.name) : m.home));
-    const awayDisplay = escHtml((awayTeam ? localTeamName(awayTeam.name) : m.away));
-    const homeFlag = homeTeam?.flag ?? '';
-    const awayFlag = awayTeam?.flag ?? '';
-    const isLive   = m.status === 'IN_PLAY' || m.status === 'PAUSED';
-    const isDone   = m.status === 'FINISHED';
-    const timeStr  = formatMatchTime(m.utcDate);
-    const badge    = isLive ? `<span class="match-badge match-badge--live">${t('liveNow')}</span>`
-                   : isDone ? `<span class="match-badge match-badge--done">${t('finished')}</span>`
-                   : timeStr ? `<span class="match-badge">${escHtml(timeStr)}</span>`
-                   : '';
+    const homeTeam    = TEAMS.find(tm => tm.name === homeEs);
+    const awayTeam    = TEAMS.find(tm => tm.name === awayEs);
+    const homeDisplay = escHtml(homeTeam ? localTeamName(homeTeam.name) : m.home);
+    const awayDisplay = escHtml(awayTeam ? localTeamName(awayTeam.name) : m.away);
+    const homeFlag    = homeTeam?.flag ?? '';
+    const awayFlag    = awayTeam?.flag ?? '';
+    const isLive      = m.status === 'IN_PLAY' || m.status === 'PAUSED';
+    const timeStr     = (!isLive && m.status !== 'FINISHED') ? formatMatchTime(m.utcDate) : '';
+    const homeOwner   = getTeamOwner(homeEs, pool);
+    const awayOwner   = getTeamOwner(awayEs, pool);
+    const centerHtml  = isLive
+      ? `<span class="today-match-live">${escHtml(t('live_indicator'))}</span>`
+      : timeStr
+      ? `<span class="today-match-time">${escHtml(timeStr)}</span>`
+      : '';
     return `<div class="today-match-card">
-      <span class="today-match-teams">${escHtml(homeFlag)} ${homeDisplay} <span class="today-match-vs">v</span> ${escHtml(awayFlag)} ${awayDisplay}</span>
-      ${badge}
+      <div class="today-match-side today-match-side--home${homeOwner ? '' : ' today-match-side--unowned'}">
+        <span class="today-match-player">${escHtml(homeOwner ?? '—')}</span>
+        <span class="today-match-team">${escHtml(homeFlag)} ${homeDisplay}</span>
+      </div>
+      <div class="today-match-center">
+        <span class="today-match-vs">vs</span>
+        ${centerHtml}
+      </div>
+      <div class="today-match-side today-match-side--away${awayOwner ? '' : ' today-match-side--unowned'}">
+        <span class="today-match-player">${escHtml(awayOwner ?? '—')}</span>
+        <span class="today-match-team">${escHtml(awayFlag)} ${awayDisplay}</span>
+      </div>
     </div>`;
   }).join('');
   wrap.innerHTML = `
@@ -1188,21 +1206,21 @@ function allocationCardsHTML(pool) {
     const teamsHtml = orderedTeams.map(tm => {
       const isElim    = eliminated.includes(teamId(tm));
       const todayInfo = todayMatchMap?.get(tm.name);
-      let todayBadge  = '';
+      let todayChip   = '';
       if (todayInfo && !isElim) {
-        const oppDisplay = todayInfo.opponentEs ? localTeamName(todayInfo.opponentEs) : '';
-        const isLive  = todayInfo.status === 'IN_PLAY' || todayInfo.status === 'PAUSED';
-        const isDone  = todayInfo.status === 'FINISHED';
-        const timeStr = (!isDone && !isLive) ? formatMatchTime(todayInfo.utcDate) : '';
-        const detail  = isLive ? t('liveNow') : isDone ? '' : timeStr ? `· ${timeStr}` : '';
-        if (oppDisplay || isLive) {
-          todayBadge = `<span class="team-today-badge${isLive ? ' team-today-badge--live' : ''}">${escHtml(t('playsTodayVs', oppDisplay))}${detail ? ' ' + escHtml(detail) : ''}</span>`;
+        const isLive = todayInfo.status === 'IN_PLAY' || todayInfo.status === 'PAUSED';
+        const isDone = todayInfo.status === 'FINISHED';
+        if (isLive) {
+          todayChip = `<span class="today-chip today-chip--live">${escHtml(t('live_indicator'))}</span>`;
+        } else if (!isDone) {
+          const timeStr = formatMatchTime(todayInfo.utcDate);
+          if (timeStr) todayChip = `<span class="today-chip">${escHtml(t('today_badge', timeStr))}</span>`;
         }
       }
       return `<li class="${isElim ? 'team-eliminated' : ''}">
         <span class="tier-dot tier-${tm.tier}"></span>
         ${isElim ? '❌ ' : '✅ '}${escHtml(tm.flag)} ${escHtml(localTeamName(tm.name))}
-        ${todayBadge}
+        ${todayChip}
       </li>`;
     }).join('');
     const statusText = out === 0
@@ -1664,7 +1682,7 @@ async function renderViewer(poolId) {
 
   // Fetch today's matches (non-blocking) — re-render cards once data lands
   fetchTodayMatches().then(todayMatches => {
-    renderTodayMatchesStrip(todayMatches);
+    renderTodayMatchesStrip(todayMatches, pool);
     if (todayMatches.length > 0) renderViewerContent(pool); // add badges
   });
 
