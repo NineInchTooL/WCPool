@@ -89,7 +89,7 @@ const EN_TO_LOCAL = {
   'Ecuador': 'Ecuador', 'Austria': 'Austria', 'Turkey': 'Turquía', 'Türkiye': 'Turquía',
   'Canada': 'Canadá', 'Sweden': 'Suecia', 'Australia': 'Australia', 'Norway': 'Noruega',
   'Paraguay': 'Paraguay', 'Tunisia': 'Túnez',
-  'Bosnia and Herzegovina': 'Bosnia y Herzegovina', 'Bosnia & Herzegovina': 'Bosnia y Herzegovina',
+  'Bosnia and Herzegovina': 'Bosnia y Herzegovina', 'Bosnia & Herzegovina': 'Bosnia y Herzegovina', 'Bosnia-Herzegovina': 'Bosnia y Herzegovina',
   'Ghana': 'Ghana', 'Czech Republic': 'República Checa', 'Czechia': 'República Checa',
   'Scotland': 'Escocia', "Ivory Coast": 'Costa de Marfil',
   "Côte d'Ivoire": 'Costa de Marfil', "Cote d'Ivoire": 'Costa de Marfil',
