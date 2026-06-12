@@ -86,12 +86,27 @@ Deno.serve(async (req) => {
       }
     } catch (_) { /* fall through */ }
 
+    // Normalize team names before dedup — the two APIs spell some teams
+    // differently (e.g. "Bosnia-Herzegovina" vs "Bosnia and Herzegovina",
+    // "Czechia" vs "Czech Republic").
+    const ALIASES: Record<string, string> = {
+      'bosnia-herzegovina':        'bosnia and herzegovina',
+      'czechia':                   'czech republic',
+      'republic of korea':         'south korea',
+      'korea republic':            'south korea',
+      'usa':                       'united states',
+      'ir iran':                   'iran',
+      'türkiye':                   'turkey',
+    };
+    const norm = (s: string) => { const l = s.toLowerCase().trim(); return ALIASES[l] ?? l; };
+    const dedupeKey = (m: TodayMatch) => `${norm(m.home)}|${norm(m.away)}`;
+
     // Merge: football-data.org entries take precedence (have proper UTC times).
     // Supplement with worldcup26.ir entries not already present.
-    const fdoKeys = new Set(fdoMatches.map((m) => `${m.home}|${m.away}`));
+    const fdoKeys = new Set(fdoMatches.map(dedupeKey));
     const merged = [
       ...fdoMatches,
-      ...irMatches.filter((m) => !fdoKeys.has(`${m.home}|${m.away}`)),
+      ...irMatches.filter((m) => !fdoKeys.has(dedupeKey(m))),
     ];
 
     return new Response(JSON.stringify(merged), {
