@@ -302,10 +302,13 @@ const TRANSLATIONS = {
     auth_magic_link_btn:       'Send magic link',
     auth_check_email:          '✉️ Check your inbox!',
     auth_check_email_sub:      'We sent a link to {email}',
-    // Today's Matches
+    // Today's Matches / Upcoming Matches
     todaysMatches:             "Today's Matches",
-    noMatchesToday:            'No matches today',
+    upcoming_matches:          'Upcoming Matches',
+    noMatchesToday:            'No upcoming matches',
     today_badge:               time => `Today ${time}`,
+    match_today:               time => `Today ${time}`,
+    match_tomorrow:            time => `Tomorrow ${time}`,
     liveNow:                   '🔴 Live',
     scheduled:                 'Scheduled',
     finished:                  'Finished',
@@ -434,10 +437,13 @@ const TRANSLATIONS = {
     auth_magic_link_btn:       'Enviar link mágico',
     auth_check_email:          '✉️ ¡Revisa tu correo!',
     auth_check_email_sub:      'Enviamos un link a {email}',
-    // Today's Matches
+    // Today's Matches / Upcoming Matches
     todaysMatches:             'Partidos de Hoy',
-    noMatchesToday:            'Sin partidos hoy',
+    upcoming_matches:          'Próximos partidos',
+    noMatchesToday:            'Sin próximos partidos',
     today_badge:               time => `Hoy ${time}`,
+    match_today:               time => `Hoy ${time}`,
+    match_tomorrow:            time => `Mañana ${time}`,
     liveNow:                   '🔴 En vivo',
     scheduled:                 'Programado',
     finished:                  'Finalizado',
@@ -566,10 +572,13 @@ const TRANSLATIONS = {
     auth_magic_link_btn:       'Enviar link mágico',
     auth_check_email:          '✉️ Verifique o seu email!',
     auth_check_email_sub:      'Enviámos um link para {email}',
-    // Today's Matches
+    // Today's Matches / Upcoming Matches
     todaysMatches:             'Jogos de Hoje',
-    noMatchesToday:            'Sem jogos hoje',
+    upcoming_matches:          'Próximos jogos',
+    noMatchesToday:            'Sem próximos jogos',
     today_badge:               time => `Hoje ${time}`,
+    match_today:               time => `Hoje ${time}`,
+    match_tomorrow:            time => `Amanhã ${time}`,
     liveNow:                   '🔴 Ao vivo',
     scheduled:                 'Agendado',
     finished:                  'Terminado',
@@ -1071,6 +1080,27 @@ function formatMatchTime(utcDateStr) {
   } catch { return ''; }
 }
 
+function getMatchDisplayTiming(utcDateStr) {
+  if (!utcDateStr) return { dayBucket: 'future', label: '' };
+  try {
+    const matchDate = new Date(utcDateStr);
+    if (isNaN(matchDate)) return { dayBucket: 'future', label: '' };
+    const now = new Date();
+    const todayStart    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const dayAfterStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2);
+    const timeStr = matchDate.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
+    if (matchDate >= todayStart && matchDate < tomorrowStart) {
+      return { dayBucket: 'today', label: t('match_today', timeStr) };
+    }
+    if (matchDate >= tomorrowStart && matchDate < dayAfterStart) {
+      return { dayBucket: 'tomorrow', label: t('match_tomorrow', timeStr) };
+    }
+    const dayStr = matchDate.toLocaleDateString(currentLocale, { weekday: 'short' });
+    return { dayBucket: 'future', label: `${dayStr} ${timeStr}` };
+  } catch { return { dayBucket: 'future', label: '' }; }
+}
+
 function getTeamOwner(teamNameEs, pool) {
   if (!pool?.allocation || !pool?.participants) return null;
   for (const p of pool.participants) {
@@ -1097,13 +1127,13 @@ function renderTodayMatchesStrip(matches, pool = null) {
     const homeFlag    = homeTeam?.flag ?? '';
     const awayFlag    = awayTeam?.flag ?? '';
     const isLive      = m.status === 'IN_PLAY' || m.status === 'PAUSED';
-    const timeStr     = (!isLive && m.status !== 'FINISHED') ? formatMatchTime(m.utcDate) : '';
+    const timing      = (!isLive && m.status !== 'FINISHED') ? getMatchDisplayTiming(m.utcDate) : null;
     const homeOwner   = getTeamOwner(homeEs, pool);
     const awayOwner   = getTeamOwner(awayEs, pool);
     const centerHtml  = isLive
       ? `<span class="today-match-live">${escHtml(t('live_indicator'))}</span>`
-      : timeStr
-      ? `<span class="today-match-time">${escHtml(timeStr)}</span>`
+      : timing?.label
+      ? `<span class="today-match-time">${escHtml(timing.label)}</span>`
       : '';
     return `<div class="today-match-card">
       <div class="today-match-side today-match-side--home${homeOwner ? '' : ' today-match-side--unowned'}">
@@ -1122,7 +1152,7 @@ function renderTodayMatchesStrip(matches, pool = null) {
   }).join('');
   wrap.innerHTML = `
     <div class="today-matches-strip">
-      <span class="today-matches-label">${escHtml(t('todaysMatches'))}</span>
+      <span class="today-matches-label">${escHtml(t('upcoming_matches'))}</span>
       <div class="today-matches-scroll">${cards}</div>
     </div>`;
 }
@@ -1213,8 +1243,8 @@ function allocationCardsHTML(pool) {
         if (isLive) {
           todayChip = `<span class="today-chip today-chip--live">${escHtml(t('live_indicator'))}</span>`;
         } else if (!isDone) {
-          const timeStr = formatMatchTime(todayInfo.utcDate);
-          if (timeStr) todayChip = `<span class="today-chip">${escHtml(t('today_badge', timeStr))}</span>`;
+          const timing = getMatchDisplayTiming(todayInfo.utcDate);
+          if (timing.label) todayChip = `<span class="today-chip">${escHtml(timing.label)}</span>`;
         }
       }
       return `<li class="${isElim ? 'team-eliminated' : ''}">
