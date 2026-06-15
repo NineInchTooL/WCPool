@@ -1133,6 +1133,9 @@ function renderTodayMatchesStrip(matches, pool = null) {
     const timing      = (!isLive && !isFinished) ? getMatchDisplayTiming(m.utcDate) : null;
     const homeOwner   = getTeamOwner(homeEs, pool);
     const awayOwner   = getTeamOwner(awayEs, pool);
+    const homeWins    = isFinished && hasScore && m.homeScore > m.awayScore;
+    const awayWins    = isFinished && hasScore && m.awayScore > m.homeScore;
+    const starIcon    = '<span class="match-winner-icon" aria-hidden="true">⭐</span>';
     let centerHtml;
     if ((isLive || isFinished) && hasScore) {
       const scoreHtml   = `<span class="match-score">${m.homeScore} – ${m.awayScore}</span>`;
@@ -1145,18 +1148,20 @@ function renderTodayMatchesStrip(matches, pool = null) {
       centerHtml = `<span class="today-match-vs">vs</span>`
         + (timing?.label ? `<span class="today-match-time">${escHtml(timing.label)}</span>` : '');
     }
-    const cardMod = isLive ? ' match-card--live' : isFinished ? ' match-card--finished' : '';
+    const cardMod    = isLive ? ' match-card--live' : isFinished ? ' match-card--finished' : '';
+    const homeSideMod = homeWins ? ' match-side--winner' : awayWins ? ' match-side--loser' : '';
+    const awaySideMod = awayWins ? ' match-side--winner' : homeWins ? ' match-side--loser' : '';
     return `<div class="today-match-card${cardMod}">
-      <div class="today-match-side today-match-side--home${homeOwner ? '' : ' today-match-side--unowned'}">
+      <div class="today-match-side today-match-side--home${homeSideMod}${homeOwner ? '' : ' today-match-side--unowned'}">
         <span class="today-match-player">${escHtml(homeOwner ?? '—')}</span>
-        <span class="today-match-team">${escHtml(homeFlag)} ${homeDisplay}</span>
+        <span class="today-match-team">${escHtml(homeFlag)} ${homeDisplay}${homeWins ? starIcon : ''}</span>
       </div>
       <div class="today-match-center">
         ${centerHtml}
       </div>
-      <div class="today-match-side today-match-side--away${awayOwner ? '' : ' today-match-side--unowned'}">
+      <div class="today-match-side today-match-side--away${awaySideMod}${awayOwner ? '' : ' today-match-side--unowned'}">
         <span class="today-match-player">${escHtml(awayOwner ?? '—')}</span>
-        <span class="today-match-team">${escHtml(awayFlag)} ${awayDisplay}</span>
+        <span class="today-match-team">${escHtml(awayFlag)} ${awayDisplay}${awayWins ? starIcon : ''}</span>
       </div>
     </div>`;
   }).join('');
@@ -1165,6 +1170,19 @@ function renderTodayMatchesStrip(matches, pool = null) {
       <span class="today-matches-label">${escHtml(t('upcoming_matches'))}</span>
       <div class="today-matches-scroll">${cards}</div>
     </div>`;
+  // Trigger winner shimmer + icon animation when each winning side enters viewport
+  const winnerSides = wrap.querySelectorAll('.match-side--winner');
+  if (winnerSides.length) {
+    const animate = (el) => el.classList.add('match-side--winner-animate');
+    if (window.IntersectionObserver) {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) { animate(e.target); io.unobserve(e.target); } });
+      }, { threshold: 0.5 });
+      winnerSides.forEach(el => io.observe(el));
+    } else {
+      winnerSides.forEach(animate);
+    }
+  }
 }
 
 function computeSuggestions(matches) {

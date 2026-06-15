@@ -1099,6 +1099,48 @@ details.elim-card[open] > summary {
 .match-card--finished .today-match-team {
   color: var(--color-text-muted);
 }
+/* Winner/loser states on finished cards */
+.match-card--finished .match-side--winner .today-match-team {
+  color: var(--color-text);
+  font-weight: 600;
+}
+.match-side--winner-animate {
+  position: relative;
+  overflow: hidden;
+}
+.match-side--winner-animate::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 220, 60, 0.18) 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: shimmer-winner 700ms ease-out forwards;
+  pointer-events: none;
+}
+.match-winner-icon {
+  display: inline-block;
+  margin-left: 3px;
+  font-style: normal;
+  opacity: 0;
+  transform: scale(0.5);
+}
+.match-side--winner-animate .match-winner-icon {
+  animation: winner-icon-in 400ms ease-out 200ms forwards;
+}
+@keyframes shimmer-winner {
+  to { transform: translateX(200%); }
+}
+@keyframes winner-icon-in {
+  to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .match-side--winner-animate::after { display: none; }
+  .match-side--winner-animate .match-winner-icon {
+    animation: none;
+    opacity: 1;
+    transform: scale(1);
+  }
+}
 /* Team-level today chip (inline on team row) */
 .today-chip {
   display: inline-flex;
