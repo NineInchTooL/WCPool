@@ -1629,9 +1629,6 @@ async function renderViewer(poolId) {
       <div class="header-left">
         <a href="#/" class="header-back">← <span class="header-back-text">${t('my_pools_back')}</span></a>
       </div>
-      <div class="header-center">
-        <span class="byline">by NineInchTooL</span>
-      </div>
       <div class="header-right" id="viewer-header-right">
         <div id="viewer-actions" class="viewer-actions"></div>
         ${localeSwitcherHTML()}
@@ -1776,7 +1773,6 @@ function renderViewerContent(pool) {
   heroWrap.innerHTML = `
     <div class="pool-hero">
       <h1 class="pool-hero-title">${escHtml(pool.title)}</h1>
-      <span class="byline">by NineInchTooL</span>
     </div>`;
 
   const lockNotice = pool.allocation_locked
