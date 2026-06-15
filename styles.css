@@ -1071,6 +1071,34 @@ details.elim-card[open] > summary {
   font-size: 0.78rem;
   color: var(--color-text-faint);
 }
+/* Score display inside VS cards */
+.match-score {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: 0.05em;
+}
+.match-elapsed {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--color-success);
+  font-weight: 600;
+}
+.match-elapsed--ft {
+  color: var(--color-text-muted);
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-success);
+  animation: live-pulse 2s ease-in-out infinite;
+}
+.match-card--finished .today-match-team {
+  color: var(--color-text-muted);
+}
 /* Team-level today chip (inline on team row) */
 .today-chip {
   display: inline-flex;

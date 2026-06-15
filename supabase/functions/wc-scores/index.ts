@@ -22,7 +22,10 @@ Deno.serve(async (req) => {
     // "today" in UTC. Evening local games (e.g. 20:00 ET = 00:00 UTC next day)
     // would be missed by a UTC-only query, so we always run both sources and merge.
     const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' in UTC
-    type TodayMatch = { home: string; away: string; utcDate: string; status: string; group: string };
+    type TodayMatch = {
+      home: string; away: string; utcDate: string; status: string; group: string;
+      homeScore: number | null; awayScore: number | null; elapsed: string | null;
+    };
 
     // Primary: football-data.org — proper UTC timestamps, accurate for UTC-day games
     let fdoMatches: TodayMatch[] = [];
@@ -36,11 +39,14 @@ Deno.serve(async (req) => {
         const data = await res.json();
         if (Array.isArray(data.matches)) {
           fdoMatches = data.matches.map((m: any) => ({
-            home:    m.homeTeam.name as string,
-            away:    m.awayTeam.name as string,
-            utcDate: m.utcDate as string,
-            status:  m.status  as string,
-            group:   (m.group ?? '') as string,
+            home:      m.homeTeam.name as string,
+            away:      m.awayTeam.name as string,
+            utcDate:   m.utcDate as string,
+            status:    m.status  as string,
+            group:     (m.group ?? '') as string,
+            homeScore: m.score?.fullTime?.home ?? m.score?.halfTime?.home ?? null,
+            awayScore: m.score?.fullTime?.away ?? m.score?.halfTime?.away ?? null,
+            elapsed:   m.minute ? String(m.minute) : (m.status === 'FINISHED' ? 'FT' : null),
           }));
         }
       }
@@ -71,16 +77,20 @@ Deno.serve(async (req) => {
             const [datePart = '', timePart = '00:00'] = ld.split(' ');
             const [mm = '01', dd = '01', yyyy = '2026'] = datePart.split('/');
             const isoDate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}T${timePart}:00`;
-            const elapsed = String(g.time_elapsed ?? '').toLowerCase();
-            const status = (elapsed === 'ft' || g.finished === 'TRUE') ? 'FINISHED'
-                         : ['1st', 'ht', '2nd', 'et', 'pen'].includes(elapsed) ? 'IN_PLAY'
+            const elapsedRaw = String(g.time_elapsed ?? '');
+            const elapsedLow = elapsedRaw.toLowerCase();
+            const status = (elapsedLow === 'ft' || g.finished === 'TRUE') ? 'FINISHED'
+                         : ['1st', 'ht', '2nd', 'et', 'pen'].includes(elapsedLow) ? 'IN_PLAY'
                          : 'TIMED';
             return {
-              home:    g.home_team_name_en as string,
-              away:    g.away_team_name_en as string,
-              utcDate: isoDate,
+              home:      g.home_team_name_en as string,
+              away:      g.away_team_name_en as string,
+              utcDate:   isoDate,
               status,
-              group:   (g.group ?? '') as string,
+              group:     (g.group ?? '') as string,
+              homeScore: g.home_score != null ? Number(g.home_score) : null,
+              awayScore: g.away_score != null ? Number(g.away_score) : null,
+              elapsed:   elapsedRaw || null,
             };
           });
       }

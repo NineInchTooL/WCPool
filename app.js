@@ -1127,21 +1127,30 @@ function renderTodayMatchesStrip(matches, pool = null) {
     const homeFlag    = homeTeam?.flag ?? '';
     const awayFlag    = awayTeam?.flag ?? '';
     const isLive      = m.status === 'IN_PLAY' || m.status === 'PAUSED';
-    const timing      = (!isLive && m.status !== 'FINISHED') ? getMatchDisplayTiming(m.utcDate) : null;
+    const isFinished  = m.status === 'FINISHED';
+    const hasScore    = m.homeScore != null && m.awayScore != null;
+    const timing      = (!isLive && !isFinished) ? getMatchDisplayTiming(m.utcDate) : null;
     const homeOwner   = getTeamOwner(homeEs, pool);
     const awayOwner   = getTeamOwner(awayEs, pool);
-    const centerHtml  = isLive
-      ? `<span class="today-match-live">${escHtml(t('live_indicator'))}</span>`
-      : timing?.label
-      ? `<span class="today-match-time">${escHtml(timing.label)}</span>`
-      : '';
-    return `<div class="today-match-card">
+    let centerHtml;
+    if ((isLive || isFinished) && hasScore) {
+      const scoreHtml   = `<span class="match-score">${m.homeScore} – ${m.awayScore}</span>`;
+      const elapsedText = escHtml(m.elapsed ?? (isFinished ? 'FT' : ''));
+      const elapsedHtml = isLive
+        ? `<span class="match-elapsed"><span class="live-dot"></span> ${elapsedText}'</span>`
+        : `<span class="match-elapsed match-elapsed--ft">${elapsedText}</span>`;
+      centerHtml = scoreHtml + elapsedHtml;
+    } else {
+      centerHtml = `<span class="today-match-vs">vs</span>`
+        + (timing?.label ? `<span class="today-match-time">${escHtml(timing.label)}</span>` : '');
+    }
+    const cardMod = isLive ? ' match-card--live' : isFinished ? ' match-card--finished' : '';
+    return `<div class="today-match-card${cardMod}">
       <div class="today-match-side today-match-side--home${homeOwner ? '' : ' today-match-side--unowned'}">
         <span class="today-match-player">${escHtml(homeOwner ?? '—')}</span>
         <span class="today-match-team">${escHtml(homeFlag)} ${homeDisplay}</span>
       </div>
       <div class="today-match-center">
-        <span class="today-match-vs">vs</span>
         ${centerHtml}
       </div>
       <div class="today-match-side today-match-side--away${awayOwner ? '' : ' today-match-side--unowned'}">
