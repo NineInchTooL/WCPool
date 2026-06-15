@@ -101,6 +101,7 @@ Deno.serve(async (req) => {
     // "Czechia" vs "Czech Republic").
     const ALIASES: Record<string, string> = {
       'bosnia-herzegovina':        'bosnia and herzegovina',
+      'cape verde islands':        'cape verde',
       'czechia':                   'czech republic',
       'republic of korea':         'south korea',
       'korea republic':            'south korea',

@@ -101,6 +101,7 @@ const EN_TO_LOCAL = {
   'Congo DR': 'Rep. Democrática del Congo',
   'Democratic Republic of the Congo': 'Rep. Democrática del Congo',
   'Cape Verde': 'Cabo Verde',
+  'Cape Verde Islands': 'Cabo Verde',
 };
 
 // Maps Spanish canonical names → display names per locale (es-MX is identity)
