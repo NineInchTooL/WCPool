@@ -156,8 +156,9 @@ let realtimeChannel = null;
 let currentSuggestions = [];
 let elimSyncIntervalId = null;
 let lastUpdatedInterval = null;
-let todayMatchesCache = null; // null = unfetched; [] = fetched, none today
-let todayMatchMap = null;     // Map<spanishCanonicalName, { opponentEs, utcDate, status }>
+let todayMatchesCache = null;  // null = unfetched; [] = fetched, none today
+let todayMatchMap = null;      // Map<spanishCanonicalName, { opponentEs, utcDate, status }>
+let todayLoaderInterval = null; // rotating status text interval during skeleton load
 const dismissedEliminationNotices = new Map(); // poolId → Set<teamName>
 
 // ── i18n ───────────────────────────────────────────────────────────
@@ -1112,6 +1113,7 @@ function getTeamOwner(teamNameEs, pool) {
 }
 
 function renderTodayMatchesStrip(matches, pool = null) {
+  if (todayLoaderInterval) { clearInterval(todayLoaderInterval); todayLoaderInterval = null; }
   const wrap = document.getElementById('today-matches-wrap');
   if (!wrap) return;
   if (!Array.isArray(matches) || !matches.length) {
@@ -1170,19 +1172,72 @@ function renderTodayMatchesStrip(matches, pool = null) {
       <span class="today-matches-label">${escHtml(t('upcoming_matches'))}</span>
       <div class="today-matches-scroll">${cards}</div>
     </div>`;
-  // Trigger winner shimmer + icon animation when each winning side enters viewport
+  // Winner shimmer: fires on viewport entry, then repeats every 3s while visible
   const winnerSides = wrap.querySelectorAll('.match-side--winner');
   if (winnerSides.length) {
-    const animate = (el) => el.classList.add('match-side--winner-animate');
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const triggerShimmer = (el) => {
+      el.classList.remove('match-side--winner-animate');
+      void el.offsetWidth; // force reflow to restart CSS animation
+      el.classList.add('match-side--winner-animate');
+    };
     if (window.IntersectionObserver) {
       const io = new IntersectionObserver((entries) => {
-        entries.forEach(e => { if (e.isIntersecting) { animate(e.target); io.unobserve(e.target); } });
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            if (prefersReducedMotion) {
+              e.target.classList.add('match-side--winner-animate');
+              io.unobserve(e.target);
+            } else {
+              triggerShimmer(e.target);
+              e.target._winnerInterval = setInterval(() => triggerShimmer(e.target), 3000);
+            }
+          } else {
+            clearInterval(e.target._winnerInterval);
+            delete e.target._winnerInterval;
+          }
+        });
       }, { threshold: 0.5 });
       winnerSides.forEach(el => io.observe(el));
     } else {
-      winnerSides.forEach(animate);
+      winnerSides.forEach(el => el.classList.add('match-side--winner-animate'));
     }
   }
+}
+
+function renderTodayMatchesSkeleton() {
+  const wrap = document.getElementById('today-matches-wrap');
+  if (!wrap) return;
+  const msgs = {
+    en: ["Checking today's matches...", "Loading live scores...", "Fetching match times...",
+         "Looking for goals...", "Syncing the fixture list...", "Almost there..."],
+    es: ["Verificando los partidos de hoy...", "Cargando marcadores en vivo...",
+         "Obteniendo horarios...", "Buscando goles...", "Sincronizando los partidos...", "Ya casi..."],
+    pt: ["A verificar os jogos de hoje...", "A carregar resultados ao vivo...",
+         "A obter os horários...", "À procura de golos...", "A sincronizar a lista de jogos...", "Já quase..."],
+  };
+  const lang = currentLocale.startsWith('es') ? 'es' : currentLocale.startsWith('pt') ? 'pt' : 'en';
+  const list = msgs[lang];
+  const skeletonCard = `<div class="skeleton-card">
+    <div class="skeleton skeleton-side"></div>
+    <div class="skeleton skeleton-center-blob"></div>
+    <div class="skeleton skeleton-side"></div>
+  </div>`;
+  wrap.innerHTML = `
+    <div class="today-matches-strip">
+      <span class="today-matches-label">${escHtml(t('upcoming_matches'))}</span>
+      <div class="today-matches-scroll">${skeletonCard.repeat(3)}</div>
+    </div>
+    <p class="today-loader-text" id="today-loader-text">${escHtml(list[0])}</p>`;
+  let idx = 0;
+  const textEl = wrap.querySelector('#today-loader-text');
+  todayLoaderInterval = setInterval(() => {
+    idx = (idx + 1) % list.length;
+    if (textEl) {
+      textEl.style.opacity = '0';
+      setTimeout(() => { if (textEl) { textEl.textContent = list[idx]; textEl.style.opacity = '1'; } }, 300);
+    }
+  }, 1800);
 }
 
 function computeSuggestions(matches) {
@@ -1735,7 +1790,8 @@ async function renderViewer(poolId) {
 
   renderViewerContent(pool);
 
-  // Fetch today's matches (non-blocking) — re-render cards once data lands
+  // Fetch today's matches (non-blocking) — show skeleton while in-flight
+  if (todayMatchesCache === null) renderTodayMatchesSkeleton();
   fetchTodayMatches().then(todayMatches => {
     renderTodayMatchesStrip(todayMatches, pool);
     if (todayMatches.length > 0) renderViewerContent(pool); // add badges

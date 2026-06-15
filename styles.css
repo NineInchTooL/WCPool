@@ -1141,6 +1141,53 @@ details.elim-card[open] > summary {
     transform: scale(1);
   }
 }
+/* Skeleton loader for Upcoming Matches */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface2) 25%,
+    var(--color-surface)  50%,
+    var(--color-surface2) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+.skeleton-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  padding: 8px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+.skeleton-side {
+  flex: 1;
+  height: 36px;
+}
+.skeleton-center-blob {
+  width: 40px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.today-loader-text {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  margin: 6px 20px 4px;
+  opacity: 1;
+  transition: opacity 300ms ease;
+}
+@media (max-width: 640px) {
+  .skeleton-card { width: 100%; min-width: unset; }
+}
 /* Team-level today chip (inline on team row) */
 .today-chip {
   display: inline-flex;
