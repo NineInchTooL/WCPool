@@ -161,7 +161,11 @@ async function consumeAuthHash() {
   if (!hash.includes('access_token')) return false;
 
   const { data, error } = await db.auth.getSession();
-  history.replaceState(null, '', window.location.pathname + '#/');
+  // Deliberately '#' (not '#/') so it never collides with the SIGNED_IN
+  // handler's '#/' redirect target below — if both used the same value,
+  // navigate('#/') would be a same-value no-op and skip its hashchange-
+  // triggered render.
+  history.replaceState(null, '', window.location.pathname + '#');
 
   return !error && !!data?.session;
 }
@@ -2479,10 +2483,17 @@ async function init() {
       await ensureProfile(newSession);
       const redirect = sessionStorage.getItem('wcpool_redirect');
       sessionStorage.removeItem('wcpool_redirect');
-      navigate(redirect && redirect !== '#/' && !redirect.includes('access_token') ? redirect : '#/');
+      const target = redirect && redirect !== '#/' && !redirect.includes('access_token') ? redirect : '#/';
+      const hashUnchanged = window.location.hash === target;
+      navigate(target);
+      // navigate() only triggers a render via the hashchange listener when the
+      // hash actually changes — force it here so a same-value redirect target
+      // (e.g. consumeAuthHash() already landed on '#/') doesn't leave the page
+      // stuck on whatever rendered before this event fired.
+      if (hashUnchanged) router();
       return;
     }
-    if (event === 'SIGNED_OUT') { navigate('#/'); router(); return; }
+    if (event === 'SIGNED_OUT') { navigate('#'); router(); return; }
     // TOKEN_REFRESHED and INITIAL_SESSION must not re-render —
     // INITIAL_SESSION fires right after the explicit render below (router()
     // or renderDashboard()) and would cause a concurrent render that
@@ -2496,10 +2507,9 @@ async function init() {
     if (!h.includes('access_token') && !h.includes('error_description')) router();
   });
 
-  // consumeAuthHash() already rewrote the URL to '#/' — render straight to the
-  // dashboard instead of falling through to router(), since setting `navigate`
-  // to the same hash value wouldn't fire a hashchange event and would leave
-  // the page stuck on the loading state.
+  // consumeAuthHash() already rewrote the URL to '#' — render straight to the
+  // dashboard instead of falling through to router(), since calling router()
+  // here would just re-render the same bare-hash branch redundantly.
   if (sessionFromHash) { await renderDashboard(); return; }
 
   router();
