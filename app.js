@@ -150,6 +150,22 @@ const TEAM_NAMES_I18N = {
 // ── Supabase (use `db` — window.supabase is non-configurable) ──────
 const db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
+// ── Auth hash interceptor ───────────────────────────────────────────
+// Supabase's OAuth/magic-link redirect lands with tokens in the hash
+// fragment (implicit flow — no `flowType` override is configured, and
+// the rest of this file already keys off `access_token` in the hash).
+// Must run before the router or onAuthStateChange so neither one ever
+// sees the raw token hash.
+async function consumeAuthHash() {
+  const hash = window.location.hash;
+  if (!hash.includes('access_token')) return false;
+
+  const { data, error } = await db.auth.getSession();
+  history.replaceState(null, '', window.location.pathname + '#/');
+
+  return !error && !!data?.session;
+}
+
 // ── State ──────────────────────────────────────────────────────────
 let currentSession = null;
 let realtimeChannel = null;
@@ -2450,6 +2466,9 @@ async function ensureProfile(session) {
 
 // ── Init ───────────────────────────────────────────────────────────
 async function init() {
+  // Must run before the listener/router below ever see window.location.hash.
+  const sessionFromHash = await consumeAuthHash();
+
   const { data: { session } } = await db.auth.getSession();
   currentSession = session;
   if (session) await ensureProfile(session);
@@ -2465,8 +2484,9 @@ async function init() {
     }
     if (event === 'SIGNED_OUT') { navigate('#/'); router(); return; }
     // TOKEN_REFRESHED and INITIAL_SESSION must not re-render —
-    // INITIAL_SESSION fires right after the explicit router() call below
-    // and would cause a concurrent render that doubles event listeners.
+    // INITIAL_SESSION fires right after the explicit render below (router()
+    // or renderDashboard()) and would cause a concurrent render that
+    // doubles event listeners.
     if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') return;
     router();
   });
@@ -2475,6 +2495,12 @@ async function init() {
     const h = window.location.hash;
     if (!h.includes('access_token') && !h.includes('error_description')) router();
   });
+
+  // consumeAuthHash() already rewrote the URL to '#/' — render straight to the
+  // dashboard instead of falling through to router(), since setting `navigate`
+  // to the same hash value wouldn't fire a hashchange event and would leave
+  // the page stuck on the loading state.
+  if (sessionFromHash) { await renderDashboard(); return; }
 
   router();
 }
