@@ -977,7 +977,7 @@ function renderAuthForm(container) {
     btn.setAttribute('aria-busy', 'true');
     const { error } = await db.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.href },
+      options: { redirectTo: window.location.origin },
     });
     if (error) {
       btn.disabled = false;
@@ -995,7 +995,7 @@ function renderAuthForm(container) {
     btn.disabled = true;
     const { error } = await db.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.href },
+      options: { emailRedirectTo: window.location.origin },
     });
     if (error) {
       btn.disabled = false;
