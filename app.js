@@ -311,6 +311,7 @@ const TRANSLATIONS = {
     today_badge:               time => `Today ${time}`,
     match_today:               time => `Today ${time}`,
     match_tomorrow:            time => `Tomorrow ${time}`,
+    match_live:                'LIVE',
     liveNow:                   '🔴 Live',
     scheduled:                 'Scheduled',
     finished:                  'Finished',
@@ -446,6 +447,7 @@ const TRANSLATIONS = {
     today_badge:               time => `Hoy ${time}`,
     match_today:               time => `Hoy ${time}`,
     match_tomorrow:            time => `Mañana ${time}`,
+    match_live:                'EN VIVO',
     liveNow:                   '🔴 En vivo',
     scheduled:                 'Programado',
     finished:                  'Finalizado',
@@ -581,6 +583,7 @@ const TRANSLATIONS = {
     today_badge:               time => `Hoje ${time}`,
     match_today:               time => `Hoje ${time}`,
     match_tomorrow:            time => `Amanhã ${time}`,
+    match_live:                'AO VIVO',
     liveNow:                   '🔴 Ao vivo',
     scheduled:                 'Agendado',
     finished:                  'Terminado',
@@ -1082,6 +1085,18 @@ function formatMatchTime(utcDateStr) {
   } catch { return ''; }
 }
 
+// Status text like HT/FT/ET/PEN should render as-is; minute values (12, 45+2) get a trailing apostrophe.
+const ELAPSED_STATUS_WORDS = new Set(['HT', 'FT', 'ET', 'PEN', 'AET']);
+function formatElapsed(status, elapsed) {
+  const value = String(elapsed ?? '').trim();
+  if (!value) {
+    return status === 'IN_PLAY' || status === 'PAUSED' ? t('match_live') : '';
+  }
+  if (ELAPSED_STATUS_WORDS.has(value.toUpperCase())) return value.toUpperCase();
+  if (/^\d+(\+\d+)?$/.test(value)) return `${value}'`;
+  return value;
+}
+
 function getMatchDisplayTiming(utcDateStr) {
   if (!utcDateStr) return { dayBucket: 'future', label: '' };
   try {
@@ -1141,9 +1156,9 @@ function renderTodayMatchesStrip(matches, pool = null) {
     let centerHtml;
     if ((isLive || isFinished) && hasScore) {
       const scoreHtml   = `<span class="match-score">${m.homeScore} – ${m.awayScore}</span>`;
-      const elapsedText = escHtml(m.elapsed ?? (isFinished ? 'FT' : ''));
+      const elapsedText = escHtml(isLive ? formatElapsed(m.status, m.elapsed) : (m.elapsed ?? 'FT'));
       const elapsedHtml = isLive
-        ? `<span class="match-elapsed"><span class="live-dot"></span> ${elapsedText}'</span>`
+        ? `<span class="match-elapsed"><span class="live-dot"></span> ${elapsedText}</span>`
         : `<span class="match-elapsed match-elapsed--ft">${elapsedText}</span>`;
       centerHtml = scoreHtml + elapsedHtml;
     } else {

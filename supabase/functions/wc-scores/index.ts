@@ -10,6 +10,16 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Normalize upstream elapsed-time text: uppercase known status words (HT/FT/ET/PEN),
+// pass minute strings ("45+2") through unchanged, collapse blanks to null.
+const ELAPSED_STATUS_WORDS = new Set(['HT', 'FT', 'ET', 'PEN', 'AET']);
+function normalizeElapsed(raw: string | null | undefined): string | null {
+  const value = String(raw ?? '').trim();
+  if (!value) return null;
+  const upper = value.toUpperCase();
+  return ELAPSED_STATUS_WORDS.has(upper) ? upper : value;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS });
@@ -46,7 +56,10 @@ Deno.serve(async (req) => {
             group:     (m.group ?? '') as string,
             homeScore: m.score?.fullTime?.home ?? m.score?.halfTime?.home ?? null,
             awayScore: m.score?.fullTime?.away ?? m.score?.halfTime?.away ?? null,
-            elapsed:   m.minute ? String(m.minute) : (m.status === 'FINISHED' ? 'FT' : null),
+            elapsed:   m.minute ? String(m.minute)
+                       : m.status === 'FINISHED' ? 'FT'
+                       : m.status === 'PAUSED' ? 'HT'
+                       : null,
           }));
         }
       }
@@ -90,7 +103,7 @@ Deno.serve(async (req) => {
               group:     (g.group ?? '') as string,
               homeScore: g.home_score != null ? Number(g.home_score) : null,
               awayScore: g.away_score != null ? Number(g.away_score) : null,
-              elapsed:   elapsedRaw || null,
+              elapsed:   normalizeElapsed(elapsedRaw),
             };
           });
       }
