@@ -100,6 +100,8 @@ const EN_TO_LOCAL = {
   'New Zealand': 'Nueva Zelanda', 'DR Congo': 'Rep. Democrática del Congo',
   'Congo DR': 'Rep. Democrática del Congo',
   'Democratic Republic of the Congo': 'Rep. Democrática del Congo',
+  'DRC': 'Rep. Democrática del Congo', 'Congo, DR': 'Rep. Democrática del Congo',
+  'República Democrática del Congo': 'Rep. Democrática del Congo',
   'Cape Verde': 'Cabo Verde',
   'Cape Verde Islands': 'Cabo Verde',
 };
@@ -1155,9 +1157,12 @@ function renderTodayMatchesStrip(matches, pool = null) {
     wrap.innerHTML = `<p class="today-matches-empty">${t('noMatchesToday')}</p>`;
     return;
   }
+  // Dedup: same fixture can arrive from both API sources with differing times
   const seen = new Map();
   const unique = matches.filter(m => {
-    const key = `${(m.home || '').toLowerCase().trim()}|${(m.away || '').toLowerCase().trim()}|${(m.utcDate || '').slice(0, 10)}`;
+    const home = (EN_TO_LOCAL[m.home] || m.home || '').toLowerCase().trim();
+    const away = (EN_TO_LOCAL[m.away] || m.away || '').toLowerCase().trim();
+    const key  = `${home}|${away}|${(m.utcDate || '').slice(0, 10)}`;
     if (seen.has(key)) return false;
     seen.set(key, true);
     return true;
