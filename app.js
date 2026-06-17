@@ -1155,7 +1155,18 @@ function renderTodayMatchesStrip(matches, pool = null) {
     wrap.innerHTML = `<p class="today-matches-empty">${t('noMatchesToday')}</p>`;
     return;
   }
-  const cards = matches.map(m => {
+  const seen = new Map();
+  const unique = matches.filter(m => {
+    const key = `${(m.home || '').toLowerCase().trim()}|${(m.away || '').toLowerCase().trim()}|${(m.utcDate || '').slice(0, 10)}`;
+    if (seen.has(key)) return false;
+    seen.set(key, true);
+    return true;
+  });
+  if (!unique.length) {
+    wrap.innerHTML = `<p class="today-matches-empty">${t('noMatchesToday')}</p>`;
+    return;
+  }
+  const cards = unique.map(m => {
     const homeEs = EN_TO_LOCAL[m.home] || m.home;
     const awayEs = EN_TO_LOCAL[m.away] || m.away;
     const homeTeam    = TEAMS.find(tm => tm.name === homeEs);
